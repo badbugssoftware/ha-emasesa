@@ -31,7 +31,22 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Vuelca configuración y último dato del coordinator, sin datos sensibles."""
-    coordinator: EmasesaCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: EmasesaCoordinator | None = hass.data.get(DOMAIN, {}).get(
+        entry.entry_id
+    )
+    if coordinator is None:
+        # La entrada no llegó a cargar: es justo cuando más falta hace el
+        # diagnóstico, así que se devuelve lo que hay en vez de fallar.
+        return {
+            "entry": {
+                "title": entry.title,
+                "version": entry.version,
+                "state": str(entry.state),
+                "data": async_redact_data(dict(entry.data), REDACT_CONFIG),
+                "options": dict(entry.options),
+            },
+            "coordinator": None,
+        }
     data = dict(coordinator.data or {})
 
     # Las incidencias llevan direcciones de terceros: solo dejamos el recuento.

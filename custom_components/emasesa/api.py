@@ -71,6 +71,13 @@ class EmasesaTwoFactorRequired(EmasesaError):
         self.detail = detail
 
 
+def _net_error(err: Exception) -> EmasesaError:
+    """Traduce un fallo de red a un error nuestro con un mensaje entendible."""
+    if isinstance(err, TimeoutError):
+        return EmasesaError("EMASESA no respondió a tiempo")
+    return EmasesaError(f"No se pudo contactar con EMASESA: {err}")
+
+
 class EmasesaClient:
     """Encapsula toda la conversación con la API de Mi Emasesa."""
 
@@ -103,17 +110,22 @@ class EmasesaClient:
             "Accept": "*/*",
             "User-Agent": USER_AGENT,
         }
-        async with self._session.post(TOKEN_URL, headers=headers, data=b"") as resp:
-            text = await resp.text()
-            if resp.status != 200:
-                raise EmasesaError(
-                    f"Fallo obteniendo token de app ({resp.status}): {text[:200]}"
-                )
-            data = _loads(text)
-            token = data.get("access_token")
-            if not token:
-                raise EmasesaError("Respuesta de token de app sin access_token")
-            return token
+        try:
+            async with self._session.post(TOKEN_URL, headers=headers, data=b"") as resp:
+                text = await resp.text()
+                status = resp.status
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise _net_error(err) from err
+
+        if status != 200:
+            raise EmasesaError(
+                f"Fallo obteniendo token de app ({status}): {text[:200]}"
+            )
+        data = _loads(text)
+        token = data.get("access_token")
+        if not token:
+            raise EmasesaError("Respuesta de token de app sin access_token")
+        return token
 
     async def login(self, pin: str | None = None) -> None:
         """Autentica al usuario y guarda el token de sesión.
@@ -140,11 +152,14 @@ class EmasesaClient:
             "Accept": "*/*",
             "User-Agent": USER_AGENT,
         }
-        async with self._session.post(
-            url, headers=headers, data=json.dumps(body)
-        ) as resp:
-            text = await resp.text()
-            status = resp.status
+        try:
+            async with self._session.post(
+                url, headers=headers, data=json.dumps(body)
+            ) as resp:
+                text = await resp.text()
+                status = resp.status
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise _net_error(err) from err
 
         if status in (401, 403):
             raise EmasesaAuthError("Usuario o contraseña incorrectos")
@@ -248,18 +263,26 @@ class EmasesaClient:
             "modelo": modelo,
             "token_notificaciones": "",
         }
-        async with self._session.post(
-            url, headers=headers, data=json.dumps(body)
-        ) as resp:
-            text = await resp.text()
-            if resp.status not in (200, 201, 204):
-                _LOGGER.warning(
-                    "[EMASESA] registro de dispositivo devolvió %s: %s",
-                    resp.status,
-                    text[:200],
-                )
-            else:
-                _LOGGER.debug("Dispositivo EMASESA registrado como de confianza")
+        try:
+            async with self._session.post(
+                url, headers=headers, data=json.dumps(body)
+            ) as resp:
+                text = await resp.text()
+                status = resp.status
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise _net_error(err) from err
+
+        if status not in (200, 201, 204):
+            # No es fatal (el alta continúa), pero sí conviene verlo: sin esto
+            # el doble factor reaparecerá en cada arranque.
+            _LOGGER.error(
+                "EMASESA no aceptó registrar el dispositivo de confianza (%s): %s. "
+                "Es probable que vuelva a pedirte el código en el próximo arranque",
+                status,
+                text[:200],
+            )
+        else:
+            _LOGGER.debug("Dispositivo EMASESA registrado como de confianza")
 
     async def _get(self, path: str, retry: bool = True) -> Any:
         """GET autenticado que devuelve JSON."""
@@ -273,15 +296,20 @@ class EmasesaClient:
             "Accept": "*/*",
             "User-Agent": USER_AGENT,
         }
-        async with self._session.get(url, headers=headers) as resp:
-            text = await resp.text()
-            if resp.status == 401 and retry:
-                # Token invalidado antes de tiempo: reautenticar una vez.
-                self._user_token = None
-                return await self._get(path, retry=False)
-            if resp.status != 200:
-                raise EmasesaError(f"GET {path} -> {resp.status}: {text[:200]}")
-            return _loads(text)
+        try:
+            async with self._session.get(url, headers=headers) as resp:
+                text = await resp.text()
+                status = resp.status
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise _net_error(err) from err
+
+        if status == 401 and retry:
+            # Token invalidado antes de tiempo: reautenticar una vez.
+            self._user_token = None
+            return await self._get(path, retry=False)
+        if status != 200:
+            raise EmasesaError(f"GET {path} -> {status}: {text[:200]}")
+        return _loads(text)
 
     async def _post(self, path: str, body: dict[str, Any], retry: bool = True) -> Any:
         """POST autenticado que devuelve JSON."""
@@ -293,16 +321,21 @@ class EmasesaClient:
             "Accept": "*/*",
             "User-Agent": USER_AGENT,
         }
-        async with self._session.post(
-            url, headers=headers, data=json.dumps(body)
-        ) as resp:
-            text = await resp.text()
-            if resp.status == 401 and retry:
-                self._user_token = None
-                return await self._post(path, body, retry=False)
-            if resp.status != 200:
-                raise EmasesaError(f"POST {path} -> {resp.status}: {text[:200]}")
-            return _loads(text)
+        try:
+            async with self._session.post(
+                url, headers=headers, data=json.dumps(body)
+            ) as resp:
+                text = await resp.text()
+                status = resp.status
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise _net_error(err) from err
+
+        if status == 401 and retry:
+            self._user_token = None
+            return await self._post(path, body, retry=False)
+        if status != 200:
+            raise EmasesaError(f"POST {path} -> {status}: {text[:200]}")
+        return _loads(text)
 
     # ------------------------------------------------------------------ #
     # Datos
@@ -317,8 +350,12 @@ class EmasesaClient:
             raise EmasesaError(
                 "Login sin 'usuarios_online_id'; no se pueden listar contratos"
             )
+        # Sin excluir relacion='AF': si se filtran aquí, un administrador de
+        # fincas recibe la lista vacía y el alta le dice "no se han encontrado
+        # contratos", cuando en realidad los tiene. La distinción se hace luego
+        # en Python, que además permite mostrárselos etiquetados.
         flt = quote(
-            f"usuarios_online_id eq {self.online_user_id} and relacion ne 'AF'",
+            f"usuarios_online_id eq {self.online_user_id}",
             safe="",
         )
         orderby = quote(
@@ -381,7 +418,13 @@ class EmasesaClient:
     ) -> list[dict[str, Any]]:
         """Últimas facturas del contrato (importe, estado de cobro, periodo)."""
         flt = quote(f"contratos_id eq {contract_id}", safe="")
-        path = f"/facturas?sistema={SISTEMA}&$filter={flt}&$top={int(top)}"
+        # Sin $orderby el servidor no garantiza el orden: "última factura"
+        # dependería de la suerte.
+        orderby = quote("fecha_emision desc", safe="")
+        path = (
+            f"/facturas?sistema={SISTEMA}&$filter={flt}"
+            f"&$orderby={orderby}&$top={int(top)}"
+        )
         data = await self._get(path)
         return data.get("value", []) if isinstance(data, dict) else (data or [])
 

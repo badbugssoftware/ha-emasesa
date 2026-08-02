@@ -65,13 +65,23 @@ class EmasesaLeakSensor(EmasesaBaseBinarySensor):
         self._attr_unique_id = f"{coordinator.contract_id}_posible_fuga"
 
     @property
-    def is_on(self) -> bool:
-        return bool((self.coordinator.data or {}).get("fuga", {}).get("detectada"))
+    def is_on(self) -> bool | None:
+        """None mientras no haya noches completas que analizar.
+
+        Decir "sin fuga" sin haber mirado ninguna noche es afirmar algo que no
+        se sabe: sin telelectura horaria, o con menos de tres noches de
+        histórico, el sensor queda en "desconocido".
+        """
+        fuga = (self.coordinator.data or {}).get("fuga", {})
+        if not fuga.get("analizado"):
+            return None
+        return bool(fuga.get("detectada"))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         f = (self.coordinator.data or {}).get("fuga", {})
         return {
+            "analizado": bool(f.get("analizado")),
             "noches_analizadas": f.get("noches"),
             "consumo_minimo_nocturno_l": f.get("min_l_h"),
             "desde": f.get("desde"),

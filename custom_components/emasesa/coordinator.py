@@ -76,6 +76,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.cost_statistic_id = f"{DOMAIN}:{self.contract_id}_water_cost"
         self.incident_radius_m = incident_radius_m
         self._tz = None
+        self._warned_no_hourly = False
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -106,8 +107,12 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if isinstance(today_raw, dict) and today_raw.get("fecha"):
             days_data[today_raw["fecha"]] = today_raw
 
+        # 'or {}' y no un default de .get(): la API puede mandar la clave a null
+        # (contratos sin contador asignado) y el default solo actúa si falta.
         contador = (
-            meter_raw.get("datosContador", {}) if isinstance(meter_raw, dict) else {}
+            (meter_raw.get("datosContador") or {})
+            if isinstance(meter_raw, dict)
+            else {}
         )
         today = today_raw if isinstance(today_raw, dict) else {}
         indice_l = today.get("indice")
@@ -182,9 +187,17 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "consumo_diurno_l": today.get("consumo_diurno"),
             "consumo_nocturno_l": today.get("consumo_nocturno"),
             "indice_l": indice_l,
+            # Sin telelectura no hay índice horario, pero /lecturas/informacion
+            # ya nos ha dado la lectura del contador en m³: mejor eso que dejar
+            # el sensor principal en "desconocido".
             "total_m3": (indice_l / LITERS_PER_M3)
             if isinstance(indice_l, (int, float))
-            else None,
+            else (
+                float(meter_raw["indice"])
+                if isinstance(meter_raw, dict)
+                and isinstance(meter_raw.get("indice"), (int, float))
+                else None
+            ),
             "meter": {
                 "indice_m3": meter_raw.get("indice")
                 if isinstance(meter_raw, dict)
@@ -220,6 +233,13 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return await coro
         except EmasesaError as err:
             _LOGGER.debug("No se pudo obtener %s: %s", what, err)
+            return None
+        except Exception:
+            _LOGGER.warning(
+                "Respuesta inesperada al obtener %s; se omite este dato",
+                what,
+                exc_info=True,
+            )
             return None
 
     async def _fetch_last_invoice(self) -> dict[str, Any]:
@@ -306,7 +326,8 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         completos.sort(key=lambda d: d.get("fecha", ""))
         recientes = completos[-LEAK_NIGHTS:]
         if len(recientes) < LEAK_NIGHTS:
-            return {"detectada": False, "noches": 0, "min_l_h": None}
+            # Sin noches completas no se puede afirmar que NO haya fuga.
+            return {"detectada": None, "analizado": False, "noches": 0, "min_l_h": None}
 
         minimos: list[float] = []
         for day in recientes:
@@ -317,12 +338,18 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 and LEAK_HOUR_START <= int(h["hora"]) <= LEAK_HOUR_END
             ]
             if not franja:
-                return {"detectada": False, "noches": 0, "min_l_h": None}
+                return {
+                    "detectada": None,
+                    "analizado": False,
+                    "noches": 0,
+                    "min_l_h": None,
+                }
             minimos.append(min(franja))
 
         detectada = all(m >= LEAK_MIN_LITERS for m in minimos)
         return {
             "detectada": detectada,
+            "analizado": True,
             "noches": len(minimos),
             "min_l_h": min(minimos) if minimos else None,
             "desde": recientes[0].get("fecha") if detectada else None,
@@ -426,6 +453,18 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 points.append((start, float(indice)))
 
         if not points:
+            # Sin telelectura horaria no hay nada que importar. Se avisa una
+            # sola vez: si no, el usuario no entiende por qué el panel de
+            # Energía está vacío y no hay ni una línea en el registro.
+            if not self._warned_no_hourly:
+                self._warned_no_hourly = True
+                _LOGGER.warning(
+                    "EMASESA no devuelve consumo por horas para el contrato %s: "
+                    "el contador no parece tener telelectura NB-IoT. Los sensores "
+                    "de factura, embalses y consumo del periodo siguen funcionando, "
+                    "pero no habrá histórico horario en el panel de Energía",
+                    self.contract_id,
+                )
             return
 
         points.sort(key=lambda p: p[0])

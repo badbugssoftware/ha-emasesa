@@ -249,9 +249,10 @@ async def test_get_contracts_codifica_filter_con_percent20_y_percent27(fake_sess
     path = client._get.await_args.args[0]
     filtro = path.split("$filter=")[1].split("&")[0]
 
-    assert filtro == (
-        f"usuarios_online_id%20eq%20{ONLINE_USER_ID}%20and%20relacion%20ne%20%27AF%27"
-    )
+    assert filtro == f"usuarios_online_id%20eq%20{ONLINE_USER_ID}"
+    # Ya NO se excluye relacion='AF' en el $filter: filtrarlo aquí dejaba a los
+    # administradores de fincas con la lista vacía y un "no hay contratos".
+    assert "%27AF%27" not in filtro
     # Los espacios NUNCA como '+': algunos parsers OData lo rechazan.
     assert "+" not in filtro
     assert " " not in filtro

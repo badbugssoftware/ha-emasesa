@@ -77,9 +77,24 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            device_id = _new_device_id()
+            usuario = normalize_username(user_input[CONF_USERNAME])
+            # Si ya hay un contrato de este mismo usuario configurado, reutiliza
+            # su id_dispositivo: ese ya es de confianza y EMASESA no volverá a
+            # mandar un SMS por cada contrato que añada.
+            device_id = (
+                next(
+                    (
+                        e.data[CONF_DEVICE_ID]
+                        for e in self._async_current_entries()
+                        if e.data.get(CONF_USERNAME) == usuario
+                        and e.data.get(CONF_DEVICE_ID)
+                    ),
+                    None,
+                )
+                or _new_device_id()
+            )
             self._data = {
-                CONF_USERNAME: normalize_username(user_input[CONF_USERNAME]),
+                CONF_USERNAME: usuario,
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
                 CONF_DEVICE_ID: device_id,
             }
@@ -93,9 +108,11 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self._client.login()
             except EmasesaTwoFactorRequired:
                 return await self.async_step_2fa()
-            except EmasesaAuthError:
+            except EmasesaAuthError as err:
+                _LOGGER.warning("EMASESA rechazó el login: %s", err)
                 errors["base"] = "invalid_auth"
-            except EmasesaError:
+            except EmasesaError as err:
+                _LOGGER.warning("No se pudo conectar con EMASESA: %s", err)
                 errors["base"] = "cannot_connect"
             else:
                 return await self._after_login()
@@ -173,13 +190,19 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             return await self._create_entry(chosen)
 
+        ya = self._async_current_ids()
         options = {
             str(c.get("contratos_id")): (
                 f"{c.get('numero_contrato') or c.get('contratos_id')} "
                 f"— {c.get('direccion_suministro', '')}"
+                + (" · administrador" if c.get("relacion") == "AF" else "")
             )
             for c in self._contracts
+            if str(c.get("contratos_id")) not in ya
         }
+        if not options:
+            # Todos sus contratos están ya dados de alta.
+            return self.async_abort(reason="already_configured")
         return self.async_show_form(
             step_id="contract",
             data_schema=vol.Schema({vol.Required(CONF_CONTRACT_ID): vol.In(options)}),
@@ -278,17 +301,21 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
         assert entry is not None
-        # El update-listener (add_update_listener en __init__) ya recarga la
-        # entrada al cambiar los datos: no llamamos a async_reload (doble carga).
-        self.hass.config_entries.async_update_entry(
+        # Recarga SIEMPRE, no basta con actualizar la entrada:
+        #   - si el usuario repite la misma contraseña (lo normal cuando solo
+        #     caducó la confianza del dispositivo), async_update_entry no
+        #     detecta cambios y no dispara los update listeners;
+        #   - y si el fallo saltó durante el arranque, async_setup_entry abortó
+        #     antes de registrar el listener, así que no hay nada que disparar.
+        # Sin esto la reautenticación decía "correcto" y todo seguía caído
+        # hasta reiniciar Home Assistant.
+        return self.async_update_reload_and_abort(
             entry,
-            data={
-                **entry.data,
+            data_updates={
                 CONF_PASSWORD: self._reauth_password,
                 CONF_DEVICE_ID: self._reauth_device_id,
             },
         )
-        return self.async_abort(reason="reauth_successful")
 
     @staticmethod
     @callback

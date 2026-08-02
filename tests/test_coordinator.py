@@ -69,6 +69,7 @@ def coordinator() -> EmasesaCoordinator:
     coord.statistic_id = f"{DOMAIN}:{CONTRACT_ID}_water"
     coord.cost_statistic_id = f"{DOMAIN}:{CONTRACT_ID}_water_cost"
     coord._tz = None
+    coord._warned_no_hourly = False
     coord._last_stat = AsyncMock(return_value=None)
     return coord
 
