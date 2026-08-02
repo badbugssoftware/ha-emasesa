@@ -61,6 +61,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
         self.contract_id = str(contract_id)
         self.statistic_id = f"{DOMAIN}:{self.contract_id}_water"
+        self.cost_statistic_id = f"{DOMAIN}:{self.contract_id}_water_cost"
         self._did_backfill = False
         self._tz = None
 
@@ -92,9 +93,6 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 days_data[day["fecha"]] = day
         if isinstance(today_raw, dict) and today_raw.get("fecha"):
             days_data[today_raw["fecha"]] = today_raw
-
-        await self._import_statistics(list(days_data.values()))
-        self._did_backfill = True
 
         contador = meter_raw.get("datosContador", {}) if isinstance(meter_raw, dict) else {}
         today = today_raw if isinstance(today_raw, dict) else {}
@@ -132,6 +130,10 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except EmasesaError as err:
             _LOGGER.warning("[EMASESA] no se pudo estimar el coste: %s", err)
 
+        # Importa las estadísticas (consumo + coste) ya con el precio €/m³.
+        await self._import_statistics(list(days_data.values()), precio_m3)
+        self._did_backfill = True
+
         return {
             "contract_id": self.contract_id,
             "coste_periodo_eur": coste_periodo,
@@ -167,12 +169,25 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             start = end + timedelta(days=1)
         return out
 
-    async def _import_statistics(self, days: list[dict[str, Any]]) -> None:
+    @staticmethod
+    def _apply_mean_type(meta: StatisticMetaData) -> None:
+        """has_mean/mean_type según versión de HA (evita el deprecation warning)."""
+        if _MEAN_TYPE_NONE is not None:
+            meta["mean_type"] = _MEAN_TYPE_NONE
+        else:
+            meta["has_mean"] = False
+
+    async def _import_statistics(
+        self, days: list[dict[str, Any]], precio_eur_m3: float | None = None
+    ) -> None:
         """Convierte el detalle horario en estadísticas externas (panel Energía).
 
         Usamos el 'indice' (lectura acumulada del contador, en litros) como
         suma absoluta en m³. Al ser un contador monotónico, la reimportación
         es idempotente y el panel de Energía calcula el consumo por diferencias.
+
+        Si se conoce el precio €/m³, importa además una estadística de COSTE
+        acumulado (€) para usarla como "entidad de costes totales" en Energía.
         """
         if not days:
             return
@@ -212,15 +227,20 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # lectura real de esa hora.
         running_max = float("-inf")
         stats: list[StatisticData] = []
+        cost_stats: list[StatisticData] = []
         for start, indice_l in points:
             running_max = max(running_max, indice_l)
+            total_m3 = running_max / LITERS_PER_M3
             stats.append(
                 StatisticData(
                     start=start,
                     state=indice_l / LITERS_PER_M3,
-                    sum=running_max / LITERS_PER_M3,
+                    sum=total_m3,
                 )
             )
+            if precio_eur_m3:
+                eur = round(total_m3 * float(precio_eur_m3), 4)
+                cost_stats.append(StatisticData(start=start, state=eur, sum=eur))
 
         metadata = StatisticMetaData(
             has_sum=True,
@@ -229,12 +249,25 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             statistic_id=self.statistic_id,
             unit_of_measurement=UnitOfVolume.CUBIC_METERS,
         )
-        # has_mean/mean_type según versión de HA (evita el deprecation warning).
-        if _MEAN_TYPE_NONE is not None:
-            metadata["mean_type"] = _MEAN_TYPE_NONE
-        else:
-            metadata["has_mean"] = False
+        self._apply_mean_type(metadata)
         async_add_external_statistics(self.hass, metadata, stats)
+
+        if cost_stats:
+            cost_meta = StatisticMetaData(
+                has_sum=True,
+                name=f"EMASESA coste {self.contract_id}",
+                source=DOMAIN,
+                statistic_id=self.cost_statistic_id,
+                unit_of_measurement="EUR",
+            )
+            self._apply_mean_type(cost_meta)
+            async_add_external_statistics(self.hass, cost_meta, cost_stats)
+
         _LOGGER.debug(
-            "Importadas %d estadísticas horarias en %s", len(stats), self.statistic_id
+            "Importadas %d estadísticas de consumo en %s%s",
+            len(stats),
+            self.statistic_id,
+            f" y {len(cost_stats)} de coste en {self.cost_statistic_id}"
+            if cost_stats
+            else "",
         )
