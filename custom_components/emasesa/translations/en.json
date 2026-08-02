@@ -72,6 +72,35 @@
       },
       "precio_m3": {
         "name": "Water price"
+      },
+      "ultima_factura": {
+        "name": "Last invoice"
+      },
+      "deuda_pendiente": {
+        "name": "Outstanding amount"
+      },
+      "consumo_medio": {
+        "name": "Average daily consumption"
+      },
+      "dias_proxima_factura": {
+        "name": "Days to next invoice"
+      },
+      "embalses": {
+        "name": "Reservoirs"
+      }
+    },
+    "binary_sensor": {
+      "posible_fuga": {
+        "name": "Possible leak"
+      },
+      "averia_contador": {
+        "name": "Meter fault"
+      },
+      "incidencia_pendiente": {
+        "name": "Pending issue"
+      },
+      "incidencia_cercana": {
+        "name": "Nearby network incident"
       }
     }
   }

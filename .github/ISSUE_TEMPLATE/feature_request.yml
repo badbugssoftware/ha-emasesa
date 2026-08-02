@@ -1,0 +1,80 @@
+name: Propuesta de mejora
+description: Sugiere una funcionalidad nueva o una mejora para la integración EMASESA.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por proponer una mejora.
+
+        Ten en cuenta que esta integración depende de la API privada de la app
+        *Mi Emasesa*: sólo se puede exponer aquello que la propia app es capaz
+        de mostrar.
+
+  - type: checkboxes
+    id: comprobaciones
+    attributes:
+      label: Comprobaciones previas
+      options:
+        - label: He buscado y no existe otra propuesta abierta sobre lo mismo.
+          required: true
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: ¿Qué problema resuelve?
+      description: Describe la necesidad, no sólo la solución que se te ha ocurrido.
+      placeholder: "Cuando... me gustaría poder... porque..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Solución propuesta
+      description: Cómo imaginas que debería funcionar.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo de mejora
+      options:
+        - Sensor o entidad nueva
+        - Servicio (acción) nuevo
+        - Estadísticas / panel de Energía
+        - Configuración y flujo de alta
+        - Diagnóstico y solución de problemas
+        - Documentación
+        - Otro
+    validations:
+      required: true
+
+  - type: textarea
+    id: origen_datos
+    attributes:
+      label: ¿Dónde se ve ese dato en la app o en la Oficina Virtual?
+      description: >
+        Si el dato que pides existe en la app *Mi Emasesa* o en la web de EMASESA,
+        indica en qué pantalla aparece (y adjunta una captura sin datos personales).
+        Eso hace mucho más fácil localizar el endpoint correspondiente.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
+      description: Plantillas, automatizaciones u otras integraciones que hayas probado.
+    validations:
+      required: false
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto adicional
+    validations:
+      required: false

@@ -1,0 +1,92 @@
+# Configuración de Ruff alineada con el estilo de Home Assistant Core.
+# Referencia: https://github.com/home-assistant/core/blob/dev/pyproject.toml
+#
+# Se seleccionan los mismos grupos que usa HA Core, salvo los que exigirían
+# reescribir código ya existente (D/pydocstyle y el subconjunto completo de
+# RUF y N). Ver notas junto a cada bloque.
+
+target-version = "py313"
+line-length = 88
+
+src = ["custom_components"]
+
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+]
+
+[lint]
+select = [
+    "A001",   # variable que ensombrece un builtin
+    "A002",   # argumento que ensombrece un builtin
+    "ASYNC",  # flake8-async (llamadas bloqueantes en corutinas)
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "COM818", # coma final sospechosa
+    "E",      # pycodestyle (errores)
+    "F",      # pyflakes
+    "FLY",    # flynt (f-strings)
+    "G",      # flake8-logging-format (no usar f-strings en el logger)
+    "I",      # isort
+    "ICN001", # alias de import no convencional
+    "INP",    # flake8-no-pep420 (paquetes sin __init__.py)
+    "ISC",    # flake8-implicit-str-concat
+    "LOG",    # flake8-logging
+    "N804",   # primer argumento de un classmethod debe llamarse cls
+    "N805",   # primer argumento de un método debe llamarse self
+    "N815",   # variable mixedCase en ámbito de clase
+    "PERF",   # perflint
+    "PGH",    # pygrep-hooks (noqa/type: ignore sin código)
+    "PIE",    # flake8-pie
+    "RET",    # flake8-return
+    "RSE",    # flake8-raise
+    "RUF005", # concatenación de colecciones
+    "RUF006", # asyncio.create_task sin guardar referencia
+    "RUF010", # conversión explícita en f-string
+    "RUF013", # Optional implícito
+    "RUF017", # sum() cuadrático sobre listas
+    "RUF018", # assert con walrus
+    "RUF019", # comprobación de clave redundante
+    "RUF020", # never | T
+    "RUF024", # dict.fromkeys con valor mutable
+    "RUF100", # noqa sin usar
+    "SIM",    # flake8-simplify
+    "SLOT",   # flake8-slots
+    "T20",    # flake8-print (nada de print() en una integración)
+    "TID251", # imports prohibidos
+    "TRY",    # tryceratops
+    "UP",     # pyupgrade
+    "W",      # pycodestyle (avisos)
+]
+
+ignore = [
+    # La longitud de línea la impone el formateador, igual que en HA Core.
+    "E501",
+    # HA Core construye mensajes largos directamente dentro del raise.
+    "TRY003",
+    # _LOGGER.error()/warning() dentro de un except es el patrón habitual en HA.
+    "TRY400",
+    # Conflictúan con `ruff format`.
+    "ISC001",
+    "W191",
+]
+
+[lint.flake8-tidy-imports.banned-api]
+"async_timeout".msg = "Usa asyncio.timeout en su lugar."
+"pytz".msg = "Usa zoneinfo / homeassistant.util.dt en su lugar."
+
+[lint.isort]
+# `homeassistant` se trata como bloque propio (igual que en HA Core), y el
+# código de la integración se importa de forma relativa (bloque local).
+known-first-party = ["custom_components", "homeassistant"]
+combine-as-imports = true
+
+[lint.mccabe]
+max-complexity = 25
+
+[lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[format]
+docstring-code-format = true
