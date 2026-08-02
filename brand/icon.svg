@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Icono propio de la integración ha-emasesa (no oficial).
+    Gota de agua con la silueta estilizada de la Giralda y las ondas del
+    Guadalquivir. Dibujo original: NO reproduce el logotipo de EMASESA ni el
+    emblema municipal NO8DO. La Giralda es un monumento histórico (s. XII-XVI)
+    y esta silueta es una interpretación propia y simplificada.
+  -->
+  <defs>
+    <linearGradient id="agua" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3ec6f0"/>
+      <stop offset="55%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#0b6fa4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Gota -->
+  <path d="M256 34 C256 34 420 220 420 314 a164 164 0 0 1-328 0 C92 220 256 34 256 34 Z"
+        fill="url(#agua)"/>
+
+  <!-- Brillo interior -->
+  <path d="M188 168 c-34 52 -46 92 -42 130 a112 112 0 0 0 24 56 c-30 -38 -40 -84 -34 -124 5 -34 24 -52 52 -62 Z"
+        fill="#ffffff" opacity="0.22"/>
+
+  <g fill="#ffffff">
+    <!-- Giraldillo (veleta) sobre la aguja -->
+    <circle cx="256" cy="122" r="8"/>
+    <rect x="253" y="128" width="6" height="14"/>
+    <!-- Cupulín -->
+    <path d="M256 142 c15 0 24 10 24 22 h-48 c0-12 9-22 24-22 Z"/>
+    <!-- Cuerpo de estrellas (el más estrecho) -->
+    <rect x="238" y="168" width="36" height="26" rx="2"/>
+    <!-- Cuerpo del reloj -->
+    <rect x="232" y="196" width="48" height="30" rx="2"/>
+    <!-- Cuerpo de campanas -->
+    <rect x="226" y="228" width="60" height="40" rx="2"/>
+    <!-- Cornisa que separa el campanario del fuste almohade -->
+    <rect x="218" y="270" width="76" height="11" rx="3"/>
+    <!-- Fuste: esbelto y alto, como la torre almohade -->
+    <rect x="228" y="281" width="56" height="105" rx="2"/>
+  </g>
+
+  <!-- Vanos y paños de sebka, en negativo -->
+  <g fill="#0b6fa4" opacity="0.5">
+    <!-- arcos del campanario -->
+    <rect x="236" y="238" width="14" height="24" rx="7"/>
+    <rect x="262" y="238" width="14" height="24" rx="7"/>
+    <!-- reloj -->
+    <rect x="246" y="204" width="20" height="16" rx="3"/>
+    <!-- ventanas gemelas del fuste -->
+    <rect x="240" y="298" width="13" height="30" rx="6"/>
+    <rect x="259" y="298" width="13" height="30" rx="6"/>
+    <rect x="240" y="340" width="13" height="28" rx="6"/>
+    <rect x="259" y="340" width="13" height="28" rx="6"/>
+  </g>
+
+  <!-- Ondas del río -->
+  <g fill="none" stroke="#ffffff" stroke-width="15" stroke-linecap="round" opacity="0.95">
+    <path d="M170 400 q30 -22 60 0 t60 0 t60 0"/>
+    <path d="M188 438 q28 -20 56 0 t56 0"/>
+  </g>
+</svg>
