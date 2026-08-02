@@ -17,6 +17,7 @@ from .api import (
     EmasesaAuthError,
     EmasesaClient,
     EmasesaError,
+    EmasesaTwoFactorRequired,
     parse_hour_dt,
 )
 from .const import (
@@ -30,6 +31,15 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _TZ_NAME = "Europe/Madrid"
+
+# HA 2025.11+ sustituye has_mean por mean_type en StatisticMetaData; usamos
+# mean_type si está disponible y caemos a has_mean en versiones antiguas.
+try:
+    from homeassistant.components.recorder.models import StatisticMeanType
+
+    _MEAN_TYPE_NONE = StatisticMeanType.NONE
+except ImportError:  # pragma: no cover
+    _MEAN_TYPE_NONE = None
 
 
 class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -64,6 +74,12 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             date_to = dt_util.now().date()
             date_from = date_to - timedelta(days=days)
             history = await self._fetch_history_chunked(date_from, date_to)
+        except EmasesaTwoFactorRequired as err:
+            # El dispositivo dejó de ser de confianza: pedir reauth en vez de
+            # reintentar en bucle (cada reintento dispararía un SMS nuevo).
+            raise ConfigEntryAuthFailed(
+                "El dispositivo requiere doble factor de nuevo; reconfigura EMASESA"
+            ) from err
         except EmasesaAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except EmasesaError as err:
@@ -84,8 +100,44 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         today = today_raw if isinstance(today_raw, dict) else {}
         indice_l = today.get("indice")
 
+        # --- Coste estimado del periodo (simulador oficial de EMASESA) -------
+        coste_periodo = None
+        precio_m3 = None
+        consumo_periodo_m3 = None
+        periodo: dict[str, Any] = {}
+        try:
+            val = await self.client.get_consumption_valuation(self.contract_id)
+            if isinstance(val, dict):
+                consumo_periodo_m3 = val.get("consumo")
+                f_ini = val.get("fechaFinUltimaFactura")
+                periodo = {
+                    "desde": f_ini,
+                    "proxima_factura": val.get("fechaProximaFacturacion"),
+                }
+                if consumo_periodo_m3 and f_ini:
+                    hoy = dt_util.now().date().strftime("%Y-%m-%d")
+                    sim = await self.client.simulate_invoice(
+                        self.contract_id, consumo_periodo_m3, f_ini, hoy
+                    )
+                    if isinstance(sim, dict) and sim.get("importe") is not None:
+                        coste_periodo = round(float(sim["importe"]), 2)
+                        precio_m3 = round(
+                            coste_periodo / float(consumo_periodo_m3), 4
+                        )
+            _LOGGER.debug(
+                "Coste periodo EMASESA: consumo=%s m3 importe=%s EUR "
+                "precio=%s EUR/m3 periodo=%s",
+                consumo_periodo_m3, coste_periodo, precio_m3, periodo,
+            )
+        except EmasesaError as err:
+            _LOGGER.warning("[EMASESA] no se pudo estimar el coste: %s", err)
+
         return {
             "contract_id": self.contract_id,
+            "coste_periodo_eur": coste_periodo,
+            "precio_m3_eur": precio_m3,
+            "consumo_periodo_m3": consumo_periodo_m3,
+            "periodo_facturacion": periodo,
             "fecha": today.get("fecha"),
             "consumo_hoy_l": today.get("consumo"),
             "consumo_diurno_l": today.get("consumo_diurno"),
@@ -171,13 +223,17 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
         metadata = StatisticMetaData(
-            has_mean=False,
             has_sum=True,
             name=f"EMASESA consumo {self.contract_id}",
             source=DOMAIN,
             statistic_id=self.statistic_id,
             unit_of_measurement=UnitOfVolume.CUBIC_METERS,
         )
+        # has_mean/mean_type según versión de HA (evita el deprecation warning).
+        if _MEAN_TYPE_NONE is not None:
+            metadata["mean_type"] = _MEAN_TYPE_NONE
+        else:
+            metadata["has_mean"] = False
         async_add_external_statistics(self.hass, metadata, stats)
         _LOGGER.debug(
             "Importadas %d estadísticas horarias en %s", len(stats), self.statistic_id

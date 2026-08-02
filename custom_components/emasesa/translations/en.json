@@ -47,7 +47,7 @@
       "init": {
         "title": "EMASESA options",
         "data": {
-          "scan_hours": "Update interval (hours)"
+          "scan_minutes": "Update interval (minutes, min. 15)"
         }
       }
     }
@@ -55,7 +55,9 @@
   "entity": {
     "sensor": {
       "indice_contador": { "name": "Meter index" },
-      "consumo_hoy": { "name": "Daily consumption" }
+      "consumo_hoy": { "name": "Daily consumption" },
+      "coste_periodo": { "name": "Billing period cost" },
+      "precio_m3": { "name": "Water price" }
     }
   }
 }
