@@ -34,7 +34,7 @@ Están en `logo/`, todas con `viewBox="0 0 256 256"`:
 |---|---|
 | `icon.png` (256×256) · `icon@2x.png` (512×512) | Icono de la integración |
 | `logo.png` / `logo@2x.png` | Copias del icono |
-| `icon-dark.png` | Variante negativa, por si hiciera falta en tema oscuro |
+| `dark_icon.png` | Variante negativa para el tema oscuro |
 
 Van recortados (`viewBox="12 10 232 232"`) para que la gota toque el borde
 superior e inferior, como piden los iconos de aplicación. **La versión de marca
@@ -57,9 +57,25 @@ rsvg-convert -w 256 -h 256 -o brand/icon.png    brand/logo/logo-primario.svg
 rsvg-convert -w 512 -h 512 -o brand/icon@2x.png brand/logo/logo-primario.svg
 ```
 
-## Que aparezca en Home Assistant
+## Cómo llegan a Home Assistant
 
-Home Assistant toma los iconos de
-[home-assistant/brands](https://github.com/home-assistant/brands). Para que se
-vea en HACS y en la interfaz hay que enviar allí un PR con estos PNG en
-`custom_integrations/emasesa/`.
+Desde **Home Assistant 2026.3** las integraciones personalizadas sirven sus
+propias imágenes de marca: basta con dejarlas en `custom_components/emasesa/brand/`
+y tienen prioridad sobre el CDN. **No hace falta enviar nada al repositorio
+[home-assistant/brands](https://github.com/home-assistant/brands)**, que para
+integraciones personalizadas ya es una carpeta heredada.
+
+Nombres que Home Assistant reconoce en esa carpeta (los que usamos van marcados):
+
+| Fichero | |
+|---|---|
+| `icon.png`, `icon@2x.png` | ✅ |
+| `logo.png`, `logo@2x.png` | ✅ |
+| `dark_icon.png`, `dark_icon@2x.png` | ✅ tema oscuro |
+| `dark_logo.png`, `dark_logo@2x.png` | ✅ tema oscuro |
+| `icon@3x.png`, `logo@3x.png` | no usados |
+
+Esto además evita cualquier ambigüedad de marca: las imágenes viven en este
+repositorio, que declara desde la primera línea que no es oficial ni está
+afiliado a EMASESA, en lugar de publicarse en un repositorio central bajo un
+dominio con el nombre de la empresa.
