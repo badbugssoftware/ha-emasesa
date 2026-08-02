@@ -490,3 +490,22 @@ async def test_register_trusted_device_no_reautentica(monkeypatch):
     with pytest.raises(EmasesaError):
         await client.register_trusted_device()
     assert llamadas == []
+
+
+@pytest.mark.parametrize(
+    ("escrito", "esperado"),
+    [
+        ("12345678Z", "12345678Z"),
+        ("12345678z", "12345678Z"),  # letra en minúscula
+        (" 12345678Z ", "12345678Z"),  # espacios alrededor
+        ("12.345.678-Z", "12345678Z"),  # con puntos y guion
+        ("12345678 z", "12345678Z"),  # espacio interno
+        ("x1234567l", "X1234567L"),  # NIE
+        ("", ""),
+    ],
+)
+def test_normalize_username(escrito, esperado):
+    """El documento se manda siempre compacto y en mayúsculas."""
+    from custom_components.emasesa.config_flow import normalize_username
+
+    assert normalize_username(escrito) == esperado

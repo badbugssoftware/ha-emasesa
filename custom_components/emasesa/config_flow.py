@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -49,6 +50,16 @@ def _new_device_id() -> str:
     return str(uuid.uuid4())
 
 
+def normalize_username(value: str) -> str:
+    """Deja el documento como lo espera EMASESA: 12345678Z.
+
+    La gente lo escribe de muchas formas ("12.345.678-z", "12345678 z") y el
+    servidor solo acepta el formato compacto en mayúsculas, así que quitamos
+    puntos, guiones y espacios.
+    """
+    return re.sub(r"[\s.\-_/]", "", value or "").upper()
+
+
 class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config flow: usuario/contraseña, doble factor y selección de contrato."""
 
@@ -68,7 +79,7 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             device_id = _new_device_id()
             self._data = {
-                CONF_USERNAME: user_input[CONF_USERNAME].strip().upper(),
+                CONF_USERNAME: normalize_username(user_input[CONF_USERNAME]),
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
                 CONF_DEVICE_ID: device_id,
             }
