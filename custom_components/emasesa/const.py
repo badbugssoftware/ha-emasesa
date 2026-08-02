@@ -1,4 +1,5 @@
 """Constantes de la integración EMASESA."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -14,7 +15,9 @@ TOKEN_URL = f"{API_ROOT}/oauth2/token?grant_type=client_credentials"
 # Credencial "client_credentials" embebida en el APK (entorno PRO).
 # Es Base64 de "<client_id>:<client_secret>" y viaja como cabecera
 # "Authorization: Basic ...". Está presente en cualquier copia de la app.
-CLIENT_BASIC = "S3VtbGxFOFRtWUs1TV9DWldqR2xMRTVrVFhJYTp0emdYZGl6emZKeEVwRUN6bGZmYzBpN0ZXWkVh"
+CLIENT_BASIC = (
+    "S3VtbGxFOFRtWUs1TV9DWldqR2xMRTVrVFhJYTp0emdYZGl6emZKeEVwRUN6bGZmYzBpN0ZXWkVh"
+)
 
 # El backend FILTRA por User-Agent: con el de Python devuelve 401 con el
 # mensaje engañoso "usuario y/o contraseña incorrectos". Hay que enviar el
@@ -25,7 +28,7 @@ USER_AGENT = "okhttp/2.1.0"
 SISTEMA = "3"
 
 # --- Claves de configuración ----------------------------------------------
-CONF_USERNAME = "usuario"          # NIF/DNI/NIE
+CONF_USERNAME = "usuario"  # NIF/DNI/NIE
 CONF_PASSWORD = "contrasena"
 CONF_DEVICE_ID = "id_dispositivo"
 CONF_CONTRACT_ID = "contrato_id"

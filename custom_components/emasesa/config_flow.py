@@ -1,4 +1,5 @@
 """Flujo de configuración para EMASESA."""
+
 from __future__ import annotations
 
 import logging
@@ -35,8 +36,8 @@ from .const import (
     DEFAULT_SCAN_MINUTES,
     DOMAIN,
     MAX_INCIDENT_RADIUS,
-    MIN_INCIDENT_RADIUS,
     MAX_SCAN_MINUTES,
+    MIN_INCIDENT_RADIUS,
     MIN_SCAN_MINUTES,
 )
 
@@ -186,9 +187,7 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_reauth(
-        self, entry_data: dict[str, Any]
-    ) -> ConfigFlowResult:
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
         self._data = dict(entry_data)
         return await self.async_step_reauth_confirm()
 
@@ -291,9 +290,7 @@ class EmasesaOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current = self.config_entry.options.get(
-            CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES
-        )
+        current = self.config_entry.options.get(CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES)
         radius = self.config_entry.options.get(
             CONF_INCIDENT_RADIUS, DEFAULT_INCIDENT_RADIUS
         )
@@ -302,7 +299,8 @@ class EmasesaOptionsFlow(OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_SCAN_MINUTES, default=current): vol.All(
-                        vol.Coerce(int), vol.Range(min=MIN_SCAN_MINUTES, max=MAX_SCAN_MINUTES)
+                        vol.Coerce(int),
+                        vol.Range(min=MIN_SCAN_MINUTES, max=MAX_SCAN_MINUTES),
                     ),
                     vol.Required(CONF_INCIDENT_RADIUS, default=radius): vol.All(
                         vol.Coerce(int),

@@ -1,4 +1,5 @@
 """Diagnósticos de la integración EMASESA (con datos personales redactados)."""
+
 from __future__ import annotations
 
 from typing import Any

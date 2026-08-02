@@ -1,4 +1,5 @@
 """Sensores binarios de EMASESA: fuga, avería del contador e incidencias."""
+
 from __future__ import annotations
 
 from typing import Any

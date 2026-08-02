@@ -1,4 +1,8 @@
-# EMASESA (Aguas de Sevilla) para Home Assistant
+<p align="center">
+  <img src="brand/icon.png" alt="Logo de la integración: una gota de agua con la Giralda" width="160">
+</p>
+
+<h1 align="center">EMASESA (Aguas de Sevilla) para Home Assistant</h1>
 
 [![HACS: repositorio personalizado](https://img.shields.io/badge/HACS-repositorio%20personalizado-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://hacs.xyz/docs/faq/custom_repositories/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%E2%89%A5%202024.6-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)

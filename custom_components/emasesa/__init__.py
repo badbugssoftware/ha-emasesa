@@ -1,4 +1,5 @@
 """Integración EMASESA (Aguas de Sevilla) para Home Assistant."""
+
 from __future__ import annotations
 
 import logging
@@ -10,10 +11,10 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import (
     HomeAssistant,
-    callback,
     ServiceCall,
     ServiceResponse,
     SupportsResponse,
+    callback,
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv

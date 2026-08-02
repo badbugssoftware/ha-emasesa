@@ -22,6 +22,7 @@ Flujo de autenticación (reverseado de la app oficial):
   3. Llamadas de datos:
        Authorization: Bearer <token_usuario>
 """
+
 from __future__ import annotations
 
 import json
@@ -105,7 +106,9 @@ class EmasesaClient:
         async with self._session.post(TOKEN_URL, headers=headers, data=b"") as resp:
             text = await resp.text()
             if resp.status != 200:
-                raise EmasesaError(f"Fallo obteniendo token de app ({resp.status}): {text[:200]}")
+                raise EmasesaError(
+                    f"Fallo obteniendo token de app ({resp.status}): {text[:200]}"
+                )
             data = _loads(text)
             token = data.get("access_token")
             if not token:
@@ -154,19 +157,25 @@ class EmasesaClient:
             "Login EMASESA: estado=%r codigo=%r con_token=%s",
             data.get("estado"),
             data.get("codigo"),
-            bool(isinstance(mensaje, dict)
-                 and isinstance(mensaje.get("token"), dict)
-                 and mensaje["token"].get("access_token")),
+            bool(
+                isinstance(mensaje, dict)
+                and isinstance(mensaje.get("token"), dict)
+                and mensaje["token"].get("access_token")
+            ),
         )
 
         # Éxito = hay token de usuario. No dependemos del valor de 'estado'.
         if not isinstance(mensaje, dict):
-            detalle = mensaje if isinstance(mensaje, str) else (
-                data.get("message") or data.get("codigo") or "desconocido"
+            detalle = (
+                mensaje
+                if isinstance(mensaje, str)
+                else (data.get("message") or data.get("codigo") or "desconocido")
             )
             raise EmasesaAuthError(f"Login rechazado: {detalle}")
 
-        token_obj = mensaje.get("token") if isinstance(mensaje.get("token"), dict) else {}
+        token_obj = (
+            mensaje.get("token") if isinstance(mensaje.get("token"), dict) else {}
+        )
         access_token = token_obj.get("access_token")
 
         if not access_token:
@@ -395,7 +404,11 @@ class EmasesaClient:
         contrato (cuota fija + tramos + saneamiento + depuración + canon + IVA),
         así que no hay que mantener tablas de tarifas.
         """
-        df = date_from.strftime("%Y-%m-%d") if isinstance(date_from, date) else str(date_from)
+        df = (
+            date_from.strftime("%Y-%m-%d")
+            if isinstance(date_from, date)
+            else str(date_from)
+        )
         dt = date_to.strftime("%Y-%m-%d") if isinstance(date_to, date) else str(date_to)
         path = (
             f"/facturas/simulacion?sistema={SISTEMA}"

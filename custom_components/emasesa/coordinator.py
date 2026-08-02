@@ -1,4 +1,5 @@
 """Coordinador de actualización para EMASESA."""
+
 from __future__ import annotations
 
 import logging
@@ -26,7 +27,6 @@ from .api import (
     parse_hour_dt,
 )
 from .const import (
-    ATTRIBUTION,
     DEFAULT_INCIDENT_RADIUS,
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
@@ -106,7 +106,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if isinstance(today_raw, dict) and today_raw.get("fecha"):
             days_data[today_raw["fecha"]] = today_raw
 
-        contador = meter_raw.get("datosContador", {}) if isinstance(meter_raw, dict) else {}
+        contador = (
+            meter_raw.get("datosContador", {}) if isinstance(meter_raw, dict) else {}
+        )
         today = today_raw if isinstance(today_raw, dict) else {}
         indice_l = today.get("indice")
 
@@ -136,13 +138,14 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
                     if isinstance(sim, dict) and sim.get("importe") is not None:
                         coste_periodo = round(float(sim["importe"]), 2)
-                        precio_m3 = round(
-                            coste_periodo / float(consumo_periodo_m3), 4
-                        )
+                        precio_m3 = round(coste_periodo / float(consumo_periodo_m3), 4)
             _LOGGER.debug(
                 "Coste periodo EMASESA: consumo=%s m3 importe=%s EUR "
                 "precio=%s EUR/m3 periodo=%s",
-                consumo_periodo_m3, coste_periodo, precio_m3, periodo,
+                consumo_periodo_m3,
+                coste_periodo,
+                precio_m3,
+                periodo,
             )
         except EmasesaError as err:
             _LOGGER.warning("[EMASESA] no se pudo estimar el coste: %s", err)
@@ -153,9 +156,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # --- Extras (no críticos: si fallan, la integración sigue) ----------
         factura = await self._safe(self._fetch_last_invoice(), "facturas") or {}
         embalses = await self._safe(self._fetch_reservoirs(), "embalses") or {}
-        incidencias = await self._safe(
-            self._fetch_nearby_incidents(), "incidencias de red"
-        ) or {}
+        incidencias = (
+            await self._safe(self._fetch_nearby_incidents(), "incidencias de red") or {}
+        )
         fuga = self._detect_leak(list(days_data.values()))
 
         return {
@@ -179,10 +182,16 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "consumo_diurno_l": today.get("consumo_diurno"),
             "consumo_nocturno_l": today.get("consumo_nocturno"),
             "indice_l": indice_l,
-            "total_m3": (indice_l / LITERS_PER_M3) if isinstance(indice_l, (int, float)) else None,
+            "total_m3": (indice_l / LITERS_PER_M3)
+            if isinstance(indice_l, (int, float))
+            else None,
             "meter": {
-                "indice_m3": meter_raw.get("indice") if isinstance(meter_raw, dict) else None,
-                "fecha_lectura": meter_raw.get("fecha") if isinstance(meter_raw, dict) else None,
+                "indice_m3": meter_raw.get("indice")
+                if isinstance(meter_raw, dict)
+                else None,
+                "fecha_lectura": meter_raw.get("fecha")
+                if isinstance(meter_raw, dict)
+                else None,
                 "fabricante": contador.get("fabricante"),
                 "modelo": contador.get("modelo"),
                 "numero_serie": contador.get("numeroSerie"),
@@ -290,7 +299,8 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         suele indicar un goteo permanente (cisterna, grifo, tubería).
         """
         completos = [
-            d for d in days
+            d
+            for d in days
             if isinstance(d.get("detalle"), list) and len(d["detalle"]) >= 24
         ]
         completos.sort(key=lambda d: d.get("fecha", ""))
@@ -403,7 +413,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 fold = 1 if hora_s in seen_hours else 0
                 seen_hours.add(hora_s)
                 naive = parse_hour_dt(fecha, hora_s)
-                start = naive.replace(tzinfo=self._tz, fold=fold).astimezone(dt_util.UTC)
+                start = naive.replace(tzinfo=self._tz, fold=fold).astimezone(
+                    dt_util.UTC
+                )
                 points.append((start, float(indice)))
 
         if not points:

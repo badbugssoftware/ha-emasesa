@@ -1,4 +1,5 @@
 """Sensores de la integración EMASESA."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -16,7 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import ATTRIBUTION, CONF_CONTRACT_NUMBER, CONF_SUPPLY_ADDRESS, DOMAIN
+from .const import ATTRIBUTION, DOMAIN
 from .coordinator import EmasesaCoordinator
 from .entity import build_device_info
 
