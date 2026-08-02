@@ -39,6 +39,8 @@ DEFAULT_SCAN_INTERVAL = timedelta(minutes=DEFAULT_SCAN_MINUTES)
 INITIAL_BACKFILL_DAYS = 60
 # En cada actualización, re-importamos los últimos N días (rellena huecos).
 UPDATE_BACKFILL_DAYS = 4
+# Tope duro al rellenar un hueco largo (API o HA caídos mucho tiempo).
+MAX_BACKFILL_DAYS = 365
 
 ATTRIBUTION = "Datos de EMASESA (Oficina Virtual / Mi Emasesa)"
 

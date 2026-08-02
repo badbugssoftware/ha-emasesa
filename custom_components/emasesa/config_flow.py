@@ -52,6 +52,8 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
         self._client: EmasesaClient | None = None
         self._data: dict[str, Any] = {}
         self._contracts: list[dict[str, Any]] = []
+        self._reauth_password: str | None = None
+        self._reauth_device_id: str | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -197,35 +199,77 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
                 user_input[CONF_PASSWORD],
                 device_id,
             )
+            self._client = client
+            self._reauth_password = user_input[CONF_PASSWORD]
+            self._reauth_device_id = device_id
             try:
                 await client.login()
+            except EmasesaTwoFactorRequired:
+                # El dispositivo dejó de ser de confianza: pedir el PIN en vez
+                # de fallar como "cannot_connect" (EmasesaTwoFactorRequired
+                # hereda de EmasesaError, así que debe capturarse ANTES).
+                return await self.async_step_reauth_2fa()
             except EmasesaAuthError:
                 errors["base"] = "invalid_auth"
             except EmasesaError:
                 errors["base"] = "cannot_connect"
             else:
-                entry = self.hass.config_entries.async_get_entry(
-                    self.context["entry_id"]
-                )
-                assert entry is not None
-                # El update-listener (add_update_listener en __init__) ya recarga
-                # la entrada al cambiar los datos, así que NO llamamos a
-                # async_reload aquí: evita una doble recarga (y doble backfill).
-                self.hass.config_entries.async_update_entry(
-                    entry,
-                    data={
-                        **entry.data,
-                        CONF_PASSWORD: user_input[CONF_PASSWORD],
-                        CONF_DEVICE_ID: device_id,
-                    },
-                )
-                return self.async_abort(reason="reauth_successful")
+                return await self._finish_reauth()
 
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=vol.Schema({vol.Required(CONF_PASSWORD): str}),
             errors=errors,
         )
+
+    async def async_step_reauth_2fa(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Doble factor durante la reautenticación."""
+        errors: dict[str, str] = {}
+        assert self._client is not None
+        if user_input is not None:
+            try:
+                await self._client.login(pin=user_input["pin"].strip())
+            except EmasesaTwoFactorRequired:
+                errors["base"] = "invalid_pin"
+            except EmasesaAuthError:
+                errors["base"] = "invalid_auth"
+            except EmasesaError:
+                errors["base"] = "cannot_connect"
+            else:
+                return await self._finish_reauth()
+
+        return self.async_show_form(
+            step_id="reauth_2fa",
+            data_schema=vol.Schema({vol.Required("pin"): str}),
+            errors=errors,
+        )
+
+    async def _finish_reauth(self) -> ConfigFlowResult:
+        """Registra el dispositivo de confianza y guarda las credenciales."""
+        assert self._client is not None
+        # Sin esto, el siguiente ciclo del coordinator volvería a pedir 2FA.
+        try:
+            await self._client.register_trusted_device()
+        except EmasesaError:
+            _LOGGER.warning(
+                "No se pudo registrar el dispositivo de confianza en el reauth",
+                exc_info=True,
+            )
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        assert entry is not None
+        # El update-listener (add_update_listener en __init__) ya recarga la
+        # entrada al cambiar los datos: no llamamos a async_reload (doble carga).
+        self.hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **entry.data,
+                CONF_PASSWORD: self._reauth_password,
+                CONF_DEVICE_ID: self._reauth_device_id,
+            },
+        )
+        return self.async_abort(reason="reauth_successful")
 
     @staticmethod
     @callback
