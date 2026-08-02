@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brand/icon.png" alt="Logo de la integración: una gota de agua con la Giralda" width="160">
+  <img src="https://raw.githubusercontent.com/badbugssoftware/ha-emasesa/main/brand/icon.png" alt="EMASESA para Home Assistant" width="160">
 </p>
 
 <h1 align="center">EMASESA (Aguas de Sevilla) para Home Assistant</h1>
