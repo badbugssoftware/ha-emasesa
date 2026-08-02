@@ -120,13 +120,15 @@ async def test_import_statistics_sum_monotonica_en_m3(
 async def test_import_statistics_convierte_hora_local_a_utc(
     coordinator, stats_calls, sample_day
 ):
-    """Julio en Madrid es UTC+2: la hora local 00 es 22:00 UTC del día anterior."""
+    """Julio en Madrid es UTC+2, y el índice de la hora H es la lectura al
+    comienzo de H, así que la fila se guarda una hora antes: la hora local 00
+    del 31 acaba en las 21:00 UTC del día 30."""
     await coordinator._import_statistics([sample_day])
     _, stats = stats_calls[0]
 
     starts = [s["start"] for s in stats]
-    assert starts[0] == datetime(2026, 7, 30, 22, 0, tzinfo=UTC)
-    assert starts[-1] == datetime(2026, 7, 31, 21, 0, tzinfo=UTC)
+    assert starts[0] == datetime(2026, 7, 30, 21, 0, tzinfo=UTC)
+    assert starts[-1] == datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
     assert all(s.tzinfo is not None for s in starts)
     assert all(
         b - a == timedelta(hours=1) for a, b in zip(starts, starts[1:], strict=False)
@@ -333,9 +335,10 @@ async def test_dst_octubre_hora_02_duplicada_no_colisiona(coordinator, stats_cal
     assert len(stats) == 25, "el 25/10/2026 tiene 25 horas locales"
     assert len(set(starts)) == 25, "las dos horas 02 deben caer en instantes distintos"
 
-    # 02 CEST -> 00:00 UTC ; 02 CET (fold=1) -> 01:00 UTC.
-    assert starts[2] == datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
-    assert starts[3] == datetime(2026, 10, 25, 1, 0, tzinfo=UTC)
+    # 02 CEST -> 00:00 UTC y 02 CET (fold=1) -> 01:00 UTC; menos la hora que se
+    # resta porque el índice es la lectura al comienzo de la hora.
+    assert starts[2] == datetime(2026, 10, 24, 23, 0, tzinfo=UTC)
+    assert starts[3] == datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
     assert starts[3] - starts[2] == timedelta(hours=1)
 
     # Día completo sin huecos ni solapes.

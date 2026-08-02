@@ -413,9 +413,16 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 fold = 1 if hora_s in seen_hours else 0
                 seen_hours.add(hora_s)
                 naive = parse_hour_dt(fecha, hora_s)
+                # El 'indice' que EMASESA da para la hora H es la lectura al
+                # COMIENZO de esa hora, o sea el cierre de la hora anterior.
+                # Home Assistant espera en la fila con start=H la lectura al
+                # FINAL de H, así que restamos una hora. Sin esto el histórico
+                # queda desplazado 60 min y el consumo de la última hora de la
+                # noche se atribuye al día siguiente (verificado contra el
+                # export oficial de consumos de EMASESA).
                 start = naive.replace(tzinfo=self._tz, fold=fold).astimezone(
                     dt_util.UTC
-                )
+                ) - timedelta(hours=1)
                 points.append((start, float(indice)))
 
         if not points:
