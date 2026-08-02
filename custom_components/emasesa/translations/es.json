@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EMASESA — Iniciar sesión",
+        "description": "Introduce tus credenciales de la Oficina Virtual / app Mi Emasesa.",
+        "data": {
+          "usuario": "NIF / DNI / NIE",
+          "contrasena": "Contraseña"
+        }
+      },
+      "2fa": {
+        "title": "Verificación en dos pasos",
+        "description": "Tu cuenta tiene doble factor. Introduce el código que EMASESA acaba de enviarte por SMS o correo.",
+        "data": {
+          "pin": "Código de verificación"
+        }
+      },
+      "contract": {
+        "title": "Selecciona el contrato",
+        "data": {
+          "contrato_id": "Contrato / punto de suministro"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Volver a autenticar",
+        "description": "La sesión de EMASESA ha caducado. Introduce de nuevo tu contraseña.",
+        "data": {
+          "contrasena": "Contraseña"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Usuario o contraseña incorrectos.",
+      "invalid_pin": "Código de verificación incorrecto.",
+      "cannot_connect": "No se pudo conectar con EMASESA."
+    },
+    "abort": {
+      "already_configured": "Este contrato ya está configurado.",
+      "no_contracts": "No se han encontrado contratos en esta cuenta.",
+      "cannot_connect": "No se pudo conectar con EMASESA.",
+      "reauth_successful": "Sesión renovada correctamente."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de EMASESA",
+        "data": {
+          "scan_hours": "Intervalo de actualización (horas)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "indice_contador": { "name": "Índice del contador" },
+      "consumo_hoy": { "name": "Consumo del día" }
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EMASESA — Sign in",
+        "description": "Enter your EMASESA Virtual Office / Mi Emasesa app credentials.",
+        "data": {
+          "usuario": "ID number (NIF / DNI / NIE)",
+          "contrasena": "Password"
+        }
+      },
+      "2fa": {
+        "title": "Two-step verification",
+        "description": "Your account has two-factor auth. Enter the code EMASESA just sent you by SMS or email.",
+        "data": {
+          "pin": "Verification code"
+        }
+      },
+      "contract": {
+        "title": "Select the contract",
+        "data": {
+          "contrato_id": "Contract / supply point"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "Your EMASESA session expired. Enter your password again.",
+        "data": {
+          "contrasena": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid username or password.",
+      "invalid_pin": "Invalid verification code.",
+      "cannot_connect": "Could not connect to EMASESA."
+    },
+    "abort": {
+      "already_configured": "This contract is already configured.",
+      "no_contracts": "No contracts found for this account.",
+      "cannot_connect": "Could not connect to EMASESA.",
+      "reauth_successful": "Session renewed successfully."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "EMASESA options",
+        "data": {
+          "scan_hours": "Update interval (hours)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "indice_contador": { "name": "Meter index" },
+      "consumo_hoy": { "name": "Daily consumption" }
+    }
+  }
+}
