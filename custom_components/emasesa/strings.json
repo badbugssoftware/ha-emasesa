@@ -47,7 +47,7 @@
       "init": {
         "title": "Opciones de EMASESA",
         "data": {
-          "scan_hours": "Intervalo de actualización (horas)"
+          "scan_minutes": "Intervalo de actualización (minutos, mín. 15)"
         }
       }
     }
@@ -55,7 +55,9 @@
   "entity": {
     "sensor": {
       "indice_contador": { "name": "Índice del contador" },
-      "consumo_hoy": { "name": "Consumo del día" }
+      "consumo_hoy": { "name": "Consumo del día" },
+      "coste_periodo": { "name": "Coste del periodo" },
+      "precio_m3": { "name": "Precio del agua" }
     }
   }
 }

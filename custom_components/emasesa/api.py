@@ -24,6 +24,7 @@ Flujo de autenticación (reverseado de la app oficial):
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
 from datetime import date, datetime
@@ -94,9 +95,13 @@ class EmasesaClient:
         """Obtiene el token de aplicación (client_credentials)."""
         headers = {
             "Authorization": f"Basic {CLIENT_BASIC}",
-            "Accept": "application/json",
+            # El servidor exige este Content-Type en /oauth2/token: sin él
+            # responde 415 (Unsupported Media Type). El grant_type va en la query.
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "*/*",
+            "User-Agent": "okhttp/2.1.0",
         }
-        async with self._session.post(TOKEN_URL, headers=headers) as resp:
+        async with self._session.post(TOKEN_URL, headers=headers, data=b"") as resp:
             text = await resp.text()
             if resp.status != 200:
                 raise EmasesaError(f"Fallo obteniendo token de app ({resp.status}): {text[:200]}")
@@ -123,35 +128,55 @@ class EmasesaClient:
             body["pin"] = pin
 
         url = f"{API_BASE}/login/autenticarUsuario?sistema={SISTEMA}"
+        # Cabeceras idénticas a las de la app oficial (okhttp). Algún filtro del
+        # servidor rechaza peticiones con User-Agent/Content-Type distintos.
         headers = {
             "Authorization": f"Bearer {app_token}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
+            "Content-Type": "application/json; charset=UTF-8",
+            "Accept": "*/*",
+            "User-Agent": "okhttp/2.1.0",
         }
-        async with self._session.post(url, headers=headers, json=body) as resp:
+        async with self._session.post(
+            url, headers=headers, data=json.dumps(body)
+        ) as resp:
             text = await resp.text()
-            if resp.status in (401, 403):
-                raise EmasesaAuthError("Usuario o contraseña incorrectos")
-            if resp.status != 200:
-                raise EmasesaError(f"Login falló ({resp.status}): {text[:200]}")
-            data = _loads(text)
+            status = resp.status
 
-        estado = str(data.get("estado", "")).lower()
+        if status in (401, 403):
+            raise EmasesaAuthError("Usuario o contraseña incorrectos")
+        if status != 200:
+            raise EmasesaError(f"Login falló ({status}): {text[:200]}")
+        data = _loads(text)
+
         mensaje = data.get("mensaje")
+        _LOGGER.debug(
+            "Login EMASESA: estado=%r codigo=%r con_token=%s",
+            data.get("estado"),
+            data.get("codigo"),
+            bool(isinstance(mensaje, dict)
+                 and isinstance(mensaje.get("token"), dict)
+                 and mensaje["token"].get("access_token")),
+        )
 
-        # Respuestas de error de credenciales suelen venir con estado != correcto
-        # y "mensaje" como texto plano.
-        if estado not in ("correcto", "ok") or not isinstance(mensaje, dict):
-            detalle = mensaje if isinstance(mensaje, str) else str(data.get("codigo"))
+        # Éxito = hay token de usuario. No dependemos del valor de 'estado'.
+        if not isinstance(mensaje, dict):
+            detalle = mensaje if isinstance(mensaje, str) else (
+                data.get("message") or data.get("codigo") or "desconocido"
+            )
             raise EmasesaAuthError(f"Login rechazado: {detalle}")
 
-        token_obj = mensaje.get("token") or {}
+        token_obj = mensaje.get("token") if isinstance(mensaje.get("token"), dict) else {}
         access_token = token_obj.get("access_token")
 
         if not access_token:
-            # No hay token todavía: probablemente doble factor pendiente.
+            # Sin token: doble factor pendiente, o credenciales inválidas.
             canal = mensaje.get("canal_doble_factor_autenticacion")
-            raise EmasesaTwoFactorRequired(channel=canal)
+            estado_aut = mensaje.get("estado_aut")
+            if canal or estado_aut:
+                raise EmasesaTwoFactorRequired(
+                    channel=canal, detail=str(estado_aut) if estado_aut else None
+                )
+            raise EmasesaAuthError("Login sin token de usuario")
 
         self._user_token = access_token
         expires_in = int(token_obj.get("expires_in", 3400))
@@ -177,6 +202,47 @@ class EmasesaClient:
             return
         await self.login()
 
+    async def register_trusted_device(
+        self, alias: str = "Home Assistant", modelo: str = "Home Assistant"
+    ) -> None:
+        """Marca el device_id como de confianza (confianza='S').
+
+        Igual que la app oficial tras el primer acceso: una vez registrado,
+        los logins posteriores con el mismo device_id NO exigen doble factor.
+        Sin esto, el coordinator volvería a pedir 2FA en cada arranque.
+        """
+        await self._ensure_token()
+        url = (
+            f"{API_BASE}/dispositivos?sistema={SISTEMA}"
+            f"&usuario={quote(self._username, safe='')}"
+        )
+        headers = {
+            "Authorization": f"Bearer {self._user_token}",
+            "Content-Type": "application/json; charset=UTF-8",
+            "Accept": "*/*",
+            "User-Agent": "okhttp/2.1.0",
+        }
+        body = {
+            "alias": alias,
+            "version_app": "3.17.2",
+            "id_dispositivo": self._device_id,
+            "confianza": "S",
+            "modelo": modelo,
+            "token_notificaciones": "",
+        }
+        async with self._session.post(
+            url, headers=headers, data=json.dumps(body)
+        ) as resp:
+            text = await resp.text()
+            if resp.status not in (200, 201, 204):
+                _LOGGER.warning(
+                    "[EMASESA] registro de dispositivo devolvió %s: %s",
+                    resp.status,
+                    text[:200],
+                )
+            else:
+                _LOGGER.debug("Dispositivo EMASESA registrado como de confianza")
+
     async def _get(self, path: str, retry: bool = True) -> Any:
         """GET autenticado que devuelve JSON."""
         await self._ensure_token()
@@ -186,7 +252,8 @@ class EmasesaClient:
         url = yarl.URL(f"{API_BASE}{path}", encoded=True)
         headers = {
             "Authorization": f"Bearer {self._user_token}",
-            "Accept": "application/json",
+            "Accept": "*/*",
+            "User-Agent": "okhttp/2.1.0",
         }
         async with self._session.get(url, headers=headers) as resp:
             text = await resp.text()
@@ -259,6 +326,38 @@ class EmasesaClient:
     async def get_meter_info(self, contract_id: str | int) -> dict[str, Any]:
         """Información del contador (índice, fabricante, NB-IoT...)."""
         path = f"/lecturas/informacion/{contract_id}?sistema={SISTEMA}"
+        return await self._get(path)
+
+    async def get_consumption_valuation(self, contract_id: str | int) -> dict[str, Any]:
+        """Valoración del consumo del periodo en curso.
+
+        Devuelve, entre otros: 'consumo' (m³ del ciclo en curso),
+        'fechaFinUltimaFactura' y 'fechaProximaFacturacion'.
+        """
+        path = f"/consumos/valoracion_consumo/{contract_id}?sistema={SISTEMA}"
+        return await self._get(path)
+
+    async def simulate_invoice(
+        self,
+        contract_id: str | int,
+        consumo_m3: float,
+        date_from: date | str,
+        date_to: date | str,
+    ) -> dict[str, Any]:
+        """Simula la factura para un consumo (m³) y periodo -> importe € exacto.
+
+        Es el simulador oficial de la app: EMASESA aplica la tarifa real del
+        contrato (cuota fija + tramos + saneamiento + depuración + canon + IVA),
+        así que no hay que mantener tablas de tarifas.
+        """
+        df = date_from.strftime("%Y-%m-%d") if isinstance(date_from, date) else str(date_from)
+        dt = date_to.strftime("%Y-%m-%d") if isinstance(date_to, date) else str(date_to)
+        path = (
+            f"/facturas/simulacion?sistema={SISTEMA}"
+            f"&consumo={int(round(float(consumo_m3)))}"
+            f"&fechaDesde={df}&fechaHasta={dt}"
+            f"&idContrato={contract_id}"
+        )
         return await self._get(path)
 
 

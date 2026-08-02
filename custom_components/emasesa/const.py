@@ -26,14 +26,14 @@ CONF_DEVICE_ID = "id_dispositivo"
 CONF_CONTRACT_ID = "contrato_id"
 CONF_CONTRACT_NUMBER = "contrato_numero"
 CONF_SUPPLY_ADDRESS = "direccion_suministro"
-CONF_SCAN_HOURS = "scan_hours"
+CONF_SCAN_MINUTES = "scan_minutes"
 
 # --- Valores por defecto ---------------------------------------------------
-# El consumo por telelectura se consolida a diario (con detalle horario),
-# así que no tiene sentido pollear muy a menudo.
-DEFAULT_SCAN_HOURS = 3
-MIN_SCAN_HOURS = 1
-DEFAULT_SCAN_INTERVAL = timedelta(hours=DEFAULT_SCAN_HOURS)
+# El consumo por telelectura se consolida como mucho cada hora (y con 1-2 días
+# de retraso), así que no tiene sentido pollear muy a menudo. Mínimo 30 min.
+DEFAULT_SCAN_MINUTES = 45
+MIN_SCAN_MINUTES = 15
+DEFAULT_SCAN_INTERVAL = timedelta(minutes=DEFAULT_SCAN_MINUTES)
 
 # Días de histórico horario a importar en el primer arranque (backfill).
 INITIAL_BACKFILL_DAYS = 60

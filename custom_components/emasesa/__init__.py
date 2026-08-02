@@ -12,9 +12,9 @@ from .const import (
     CONF_CONTRACT_ID,
     CONF_DEVICE_ID,
     CONF_PASSWORD,
-    CONF_SCAN_HOURS,
+    CONF_SCAN_MINUTES,
     CONF_USERNAME,
-    DEFAULT_SCAN_HOURS,
+    DEFAULT_SCAN_MINUTES,
     DOMAIN,
     PLATFORMS,
 )
@@ -30,12 +30,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_DEVICE_ID],
     )
 
-    scan_hours = entry.options.get(CONF_SCAN_HOURS, DEFAULT_SCAN_HOURS)
+    scan_minutes = entry.options.get(CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES)
     coordinator = EmasesaCoordinator(
         hass,
         client,
         entry.data[CONF_CONTRACT_ID],
-        timedelta(hours=scan_hours),
+        timedelta(minutes=scan_minutes),
     )
     await coordinator.async_config_entry_first_refresh()
 

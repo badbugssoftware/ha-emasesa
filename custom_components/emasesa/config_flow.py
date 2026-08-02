@@ -27,20 +27,20 @@ from .const import (
     CONF_CONTRACT_NUMBER,
     CONF_DEVICE_ID,
     CONF_PASSWORD,
-    CONF_SCAN_HOURS,
+    CONF_SCAN_MINUTES,
     CONF_SUPPLY_ADDRESS,
     CONF_USERNAME,
-    DEFAULT_SCAN_HOURS,
+    DEFAULT_SCAN_MINUTES,
     DOMAIN,
-    MIN_SCAN_HOURS,
+    MIN_SCAN_MINUTES,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _new_device_id() -> str:
-    """Genera un id de dispositivo estable (32 chars), como hace la app."""
-    return str(uuid.uuid4())[:32]
+    """Genera un id de dispositivo (UUID completo), como hace la app."""
+    return str(uuid.uuid4())
 
 
 class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -117,8 +117,16 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _after_login(self) -> ConfigFlowResult:
-        """Tras autenticar: obtiene contratos y decide siguiente paso."""
+        """Tras autenticar: registra el dispositivo, obtiene contratos y decide."""
         assert self._client is not None
+        # Marca el dispositivo como de confianza para que el coordinator (y los
+        # arranques posteriores) NO vuelvan a exigir doble factor.
+        try:
+            await self._client.register_trusted_device()
+        except EmasesaError:
+            _LOGGER.warning(
+                "No se pudo registrar el dispositivo de confianza", exc_info=True
+            )
         try:
             self._contracts = await self._client.get_contracts()
         except EmasesaError:
@@ -234,13 +242,15 @@ class EmasesaOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current = self.config_entry.options.get(CONF_SCAN_HOURS, DEFAULT_SCAN_HOURS)
+        current = self.config_entry.options.get(
+            CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_SCAN_HOURS, default=current): vol.All(
-                        vol.Coerce(int), vol.Range(min=MIN_SCAN_HOURS, max=24)
+                    vol.Required(CONF_SCAN_MINUTES, default=current): vol.All(
+                        vol.Coerce(int), vol.Range(min=MIN_SCAN_MINUTES, max=1440)
                     )
                 }
             ),

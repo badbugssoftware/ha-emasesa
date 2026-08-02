@@ -27,6 +27,8 @@ async def async_setup_entry(
         [
             EmasesaMeterSensor(coordinator, entry),
             EmasesaTodaySensor(coordinator, entry),
+            EmasesaCostSensor(coordinator, entry),
+            EmasesaPriceSensor(coordinator, entry),
         ]
     )
 
@@ -123,3 +125,58 @@ class EmasesaTodaySensor(EmasesaBaseSensor):
             "consumo_diurno_litros": data.get("consumo_diurno_l"),
             "consumo_nocturno_litros": data.get("consumo_nocturno_l"),
         }
+
+
+class EmasesaCostSensor(EmasesaBaseSensor):
+    """Coste estimado del periodo de facturación en curso (€).
+
+    Lo calcula el simulador oficial de EMASESA con tu consumo real del ciclo,
+    aplicando cuota fija + tramos + saneamiento + depuración + canon + IVA.
+    """
+
+    _attr_translation_key = "coste_periodo"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "EUR"
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:cash"
+
+    def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{coordinator.contract_id}_coste_periodo"
+
+    @property
+    def native_value(self) -> float | None:
+        return (self.coordinator.data or {}).get("coste_periodo_eur")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = self.coordinator.data or {}
+        periodo = data.get("periodo_facturacion", {}) or {}
+        return {
+            "consumo_periodo_m3": data.get("consumo_periodo_m3"),
+            "precio_efectivo_eur_m3": data.get("precio_m3_eur"),
+            "periodo_desde": periodo.get("desde"),
+            "proxima_factura": periodo.get("proxima_factura"),
+        }
+
+
+class EmasesaPriceSensor(EmasesaBaseSensor):
+    """Precio efectivo del agua (€/m³) del periodo en curso.
+
+    Pensado para el coste del panel de Energía (opción "precio por m³").
+    Baja según consumes más, porque reparte la cuota fija entre más m³.
+    """
+
+    _attr_translation_key = "precio_m3"
+    _attr_native_unit_of_measurement = "EUR/m³"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 4
+    _attr_icon = "mdi:cash-multiple"
+
+    def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{coordinator.contract_id}_precio_m3"
+
+    @property
+    def native_value(self) -> float | None:
+        return (self.coordinator.data or {}).get("precio_m3_eur")
