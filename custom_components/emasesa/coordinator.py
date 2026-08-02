@@ -5,8 +5,12 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-from homeassistant.components.recorder.statistics import async_add_external_statistics
+from homeassistant.components.recorder.statistics import (
+    async_add_external_statistics,
+    get_last_statistics,
+)
 from homeassistant.const import UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -62,7 +66,6 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.contract_id = str(contract_id)
         self.statistic_id = f"{DOMAIN}:{self.contract_id}_water"
         self.cost_statistic_id = f"{DOMAIN}:{self.contract_id}_water_cost"
-        self._did_backfill = False
         self._tz = None
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -70,8 +73,8 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             today_raw = await self.client.get_latest_consumption(self.contract_id)
             meter_raw = await self.client.get_meter_info(self.contract_id)
 
-            # Ventana de histórico: amplia el primer arranque, corta después.
-            days = INITIAL_BACKFILL_DAYS if not self._did_backfill else UPDATE_BACKFILL_DAYS
+            # Ventana de histórico según el hueco real ya almacenado.
+            days = await self._days_to_backfill()
             date_to = dt_util.now().date()
             date_from = date_to - timedelta(days=days)
             history = await self._fetch_history_chunked(date_from, date_to)
@@ -132,7 +135,6 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Importa las estadísticas (consumo + coste) ya con el precio €/m³.
         await self._import_statistics(list(days_data.values()), precio_m3)
-        self._did_backfill = True
 
         return {
             "contract_id": self.contract_id,
@@ -168,6 +170,33 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             out.extend(await self.client.get_consumption(self.contract_id, start, end))
             start = end + timedelta(days=1)
         return out
+
+    async def _last_stat(self, statistic_id: str) -> dict[str, Any] | None:
+        """Última fila almacenada de una estadística externa (o None)."""
+        res = await get_instance(self.hass).async_add_executor_job(
+            get_last_statistics,
+            self.hass,
+            1,
+            statistic_id,
+            True,
+            {"sum", "start"},
+        )
+        rows = (res or {}).get(statistic_id)
+        return rows[0] if rows else None
+
+    async def _days_to_backfill(self) -> int:
+        """Días de histórico a pedir: cubre el hueco real desde lo ya guardado.
+
+        Evita reimportar 60 días en cada reinicio de HA (antes se usaba una
+        bandera en memoria) y, a la vez, rellena huecos largos si la API o HA
+        han estado caídos más que la ventana normal de actualización.
+        """
+        last = await self._last_stat(self.statistic_id)
+        if not last:
+            return INITIAL_BACKFILL_DAYS
+        last_dt = dt_util.utc_from_timestamp(last["start"])
+        gap = (dt_util.utcnow() - last_dt).days + 1
+        return max(UPDATE_BACKFILL_DAYS, min(gap, MAX_BACKFILL_DAYS))
 
     @staticmethod
     def _apply_mean_type(meta: StatisticMetaData) -> None:
@@ -227,20 +256,49 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # lectura real de esa hora.
         running_max = float("-inf")
         stats: list[StatisticData] = []
-        cost_stats: list[StatisticData] = []
         for start, indice_l in points:
             running_max = max(running_max, indice_l)
-            total_m3 = running_max / LITERS_PER_M3
             stats.append(
                 StatisticData(
                     start=start,
                     state=indice_l / LITERS_PER_M3,
-                    sum=total_m3,
+                    sum=running_max / LITERS_PER_M3,
                 )
             )
-            if precio_eur_m3:
-                eur = round(total_m3 * float(precio_eur_m3), 4)
-                cost_stats.append(StatisticData(start=start, state=eur, sum=eur))
+
+        # --- Coste: acumulado por INCREMENTOS, nunca reescribiendo el pasado ---
+        # El precio efectivo €/m³ cambia dentro del ciclo (la cuota fija se
+        # reparte entre más m³). Si el coste se derivase del índice absoluto
+        # (indice × precio_actual), al reimportar días ya escritos la 'sum'
+        # bajaría y el panel de Energía lo tomaría como reset del contador.
+        cost_stats: list[StatisticData] = []
+        if precio_eur_m3:
+            last_cost = await self._last_stat(self.cost_statistic_id)
+            if last_cost:
+                cost_sum = float(last_cost["sum"] or 0.0)
+                last_cost_ts = float(last_cost["start"])
+            else:
+                cost_sum = 0.0
+                last_cost_ts = None
+
+            prev_l: float | None = None
+            for start, indice_l in points:
+                ts = start.timestamp()
+                if last_cost_ts is not None and ts <= last_cost_ts:
+                    # Ya contabilizada: sirve solo de referencia para el delta.
+                    prev_l = indice_l
+                    continue
+                if prev_l is not None:
+                    delta_m3 = max(0.0, (indice_l - prev_l) / LITERS_PER_M3)
+                    cost_sum += delta_m3 * float(precio_eur_m3)
+                    cost_stats.append(
+                        StatisticData(
+                            start=start,
+                            state=round(cost_sum, 4),
+                            sum=round(cost_sum, 4),
+                        )
+                    )
+                prev_l = indice_l
 
         metadata = StatisticMetaData(
             has_sum=True,

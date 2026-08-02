@@ -28,6 +28,13 @@
         "data": {
           "contrasena": "Contraseña"
         }
+      },
+      "reauth_2fa": {
+        "title": "Código de verificación",
+        "description": "Introduce el código que EMASESA ha enviado a tu móvil o correo.",
+        "data": {
+          "pin": "Código de verificación"
+        }
       }
     },
     "error": {
@@ -54,10 +61,18 @@
   },
   "entity": {
     "sensor": {
-      "indice_contador": { "name": "Índice del contador" },
-      "consumo_hoy": { "name": "Consumo del día" },
-      "coste_periodo": { "name": "Coste del periodo" },
-      "precio_m3": { "name": "Precio del agua" }
+      "indice_contador": {
+        "name": "Índice del contador"
+      },
+      "consumo_hoy": {
+        "name": "Consumo del día"
+      },
+      "coste_periodo": {
+        "name": "Coste del periodo"
+      },
+      "precio_m3": {
+        "name": "Precio del agua"
+      }
     }
   }
 }
