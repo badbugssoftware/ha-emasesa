@@ -276,6 +276,17 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "porc_llenado": round(vol / cap * 100, 1) if cap else None,
             "vol_embalsado_hm3": round(vol, 2),
             "capacidad_hm3": round(cap, 2),
+            # Uno por embalse: cada uno tiene su propio sensor.
+            "por_embalse": [
+                {
+                    "nombre": e.get("embalse"),
+                    "porc_llenado": e.get("porc_llenado"),
+                    "vol_embalsado_hm3": e.get("vol_embalsado"),
+                    "capacidad_hm3": e.get("capacidad"),
+                }
+                for e in embalses
+                if e.get("embalse")
+            ],
             "detalle": {
                 e.get("embalse"): e.get("porc_llenado")
                 for e in embalses

@@ -432,3 +432,69 @@ async def test_fetch_history_chunked_trocea_en_30_dias(coordinator):
         c.args[0] == CONTRACT_ID
         for c in coordinator.client.get_consumption.await_args_list
     )
+
+
+@pytest.mark.asyncio
+async def test_embalses_expone_uno_por_embalse(coordinator):
+    """Cada embalse sale por separado, no solo escondido en los atributos."""
+    coordinator.client.get_reservoirs = AsyncMock(
+        return_value={
+            "fecha": "02/08/2026",
+            # Los seis embalses reales del sistema de abastecimiento de Sevilla.
+            "embalses": [
+                {
+                    "embalse": "Aracena",
+                    "vol_embalsado": 107.0,
+                    "capacidad": 128.65,
+                    "porc_llenado": 83.2,
+                },
+                {
+                    "embalse": "Zufre",
+                    "vol_embalsado": 150.09,
+                    "capacidad": 175.27,
+                    "porc_llenado": 85.6,
+                },
+                {
+                    "embalse": "Minilla",
+                    "vol_embalsado": 32.62,
+                    "capacidad": 57.8,
+                    "porc_llenado": 56.4,
+                },
+                {
+                    "embalse": "Gergal",
+                    "vol_embalsado": 21.7,
+                    "capacidad": 35.05,
+                    "porc_llenado": 61.9,
+                },
+                {
+                    "embalse": "Cala",
+                    "vol_embalsado": 39.4,
+                    "capacidad": 57.52,
+                    "porc_llenado": 68.5,
+                },
+                {
+                    "embalse": "Melonares",
+                    "vol_embalsado": 164.51,
+                    "capacidad": 186.87,
+                    "porc_llenado": 88.2,
+                },
+            ],
+        }
+    )
+    datos = await coordinator._fetch_reservoirs()
+
+    porc = {e["nombre"]: e["porc_llenado"] for e in datos["por_embalse"]}
+    assert porc == {
+        "Aracena": 83.2,
+        "Zufre": 85.6,
+        "Minilla": 56.4,
+        "Gergal": 61.9,
+        "Cala": 68.5,
+        "Melonares": 88.2,
+    }
+    # cada uno conserva volumen y capacidad para sus atributos
+    aracena = next(e for e in datos["por_embalse"] if e["nombre"] == "Aracena")
+    assert aracena["vol_embalsado_hm3"] == 107.0
+    assert aracena["capacidad_hm3"] == 128.65
+    # y el conjunto sigue siendo la media ponderada real
+    assert datos["porc_llenado"] == pytest.approx(80.4, abs=0.1)

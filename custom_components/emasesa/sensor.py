@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -41,6 +42,17 @@ async def async_setup_entry(
             EmasesaReservoirSensor(coordinator, entry),
         ]
     )
+
+    # Un sensor por embalse. La lista la decide la API, así que se leen los
+    # que ya trajo el primer refresco.
+    embalses = (coordinator.data or {}).get("embalses", {})
+    nombres = [
+        e["nombre"] for e in (embalses.get("por_embalse") or []) if e.get("nombre")
+    ]
+    if nombres:
+        async_add_entities(
+            EmasesaReservoirDetailSensor(coordinator, entry, n) for n in nombres
+        )
 
 
 class EmasesaBaseSensor(CoordinatorEntity[EmasesaCoordinator], SensorEntity):
@@ -319,3 +331,53 @@ class EmasesaReservoirSensor(EmasesaBaseSensor):
         }
         attrs.update(e.get("detalle") or {})
         return attrs
+
+
+class EmasesaReservoirDetailSensor(EmasesaBaseSensor):
+    """Nivel de un embalse concreto (Aracena, Zufre, Minilla...).
+
+    Se crean tantos como devuelva la API, para poder ver de un vistazo cuál
+    está bajo en vez de tener que abrir los atributos del sensor conjunto.
+    """
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:water-well"
+
+    def __init__(
+        self, coordinator: EmasesaCoordinator, entry: ConfigEntry, nombre: str
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._nombre = nombre
+        slug = re.sub(r"[^a-z0-9]+", "_", nombre.lower()).strip("_")
+        self._attr_unique_id = f"{coordinator.contract_id}_embalse_{slug}"
+        # Nombre dinámico: no hay clave de traducción posible para algo que
+        # decide la API. Con has_entity_name queda "EMASESA <contrato> Aracena".
+        self._attr_name = f"Embalse {nombre}"
+
+    def _datos(self) -> dict[str, Any]:
+        embalses = (self.coordinator.data or {}).get("embalses", {})
+        for e in embalses.get("por_embalse") or []:
+            if e.get("nombre") == self._nombre:
+                return e
+        return {}
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(self._datos())
+
+    @property
+    def native_value(self) -> float | None:
+        return self._datos().get("porc_llenado")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        e = self._datos()
+        embalses = (self.coordinator.data or {}).get("embalses", {})
+        return {
+            "embalse": self._nombre,
+            "volumen_hm3": e.get("vol_embalsado_hm3"),
+            "capacidad_hm3": e.get("capacidad_hm3"),
+            "fecha": embalses.get("fecha"),
+        }
