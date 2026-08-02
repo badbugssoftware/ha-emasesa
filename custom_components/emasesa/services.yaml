@@ -1,0 +1,63 @@
+simular_factura:
+  name: Simular factura
+  description: >-
+    Calcula con el simulador oficial de EMASESA cuánto costaría un consumo
+    determinado en el periodo indicado. Devuelve el importe y el desglose.
+  fields:
+    config_entry_id:
+      name: Integración
+      description: Contrato de EMASESA sobre el que simular.
+      required: true
+      selector:
+        config_entry:
+          integration: emasesa
+    consumo:
+      name: Consumo (m³)
+      description: Metros cúbicos a simular.
+      required: true
+      example: 20
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 1
+          unit_of_measurement: m³
+          mode: box
+    fecha_desde:
+      name: Desde
+      description: Inicio del periodo. Por defecto, el del ciclo en curso.
+      required: false
+      selector:
+        date:
+    fecha_hasta:
+      name: Hasta
+      description: Fin del periodo. Por defecto, hoy.
+      required: false
+      selector:
+        date:
+
+recargar_historico:
+  name: Recargar histórico
+  description: >-
+    Vuelve a importar el consumo horario de los últimos N días a las
+    estadísticas. Útil si detectas huecos en el panel de Energía.
+  fields:
+    config_entry_id:
+      name: Integración
+      description: Contrato de EMASESA a recargar.
+      required: true
+      selector:
+        config_entry:
+          integration: emasesa
+    dias:
+      name: Días
+      description: Cuántos días hacia atrás recargar.
+      required: false
+      default: 60
+      selector:
+        number:
+          min: 1
+          max: 365
+          step: 1
+          unit_of_measurement: días
+          mode: box

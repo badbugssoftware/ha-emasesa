@@ -26,12 +26,16 @@ from .const import (
     CONF_CONTRACT_ID,
     CONF_CONTRACT_NUMBER,
     CONF_DEVICE_ID,
+    CONF_INCIDENT_RADIUS,
     CONF_PASSWORD,
     CONF_SCAN_MINUTES,
     CONF_SUPPLY_ADDRESS,
     CONF_USERNAME,
+    DEFAULT_INCIDENT_RADIUS,
     DEFAULT_SCAN_MINUTES,
     DOMAIN,
+    MAX_INCIDENT_RADIUS,
+    MIN_INCIDENT_RADIUS,
     MIN_SCAN_MINUTES,
 )
 
@@ -289,13 +293,20 @@ class EmasesaOptionsFlow(OptionsFlow):
         current = self.config_entry.options.get(
             CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES
         )
+        radius = self.config_entry.options.get(
+            CONF_INCIDENT_RADIUS, DEFAULT_INCIDENT_RADIUS
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_SCAN_MINUTES, default=current): vol.All(
                         vol.Coerce(int), vol.Range(min=MIN_SCAN_MINUTES, max=1440)
-                    )
+                    ),
+                    vol.Required(CONF_INCIDENT_RADIUS, default=radius): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=MIN_INCIDENT_RADIUS, max=MAX_INCIDENT_RADIUS),
+                    ),
                 }
             ),
         )

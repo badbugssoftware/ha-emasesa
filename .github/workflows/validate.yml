@@ -1,0 +1,47 @@
+name: Validate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    # Lunes a las 04:00 UTC: detecta roturas causadas por cambios en
+    # hassfest/HACS aunque no se haya tocado el repositorio.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run hassfest
+        uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+          # Mientras el logo/icono de "emasesa" no esté aceptado en
+          # https://github.com/home-assistant/brands, la comprobación "brands"
+          # fallará. Descomenta la línea siguiente para ignorarla hasta que el
+          # PR de brands esté mergeado.
+          # ignore: brands

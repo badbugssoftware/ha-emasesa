@@ -72,6 +72,35 @@
       },
       "precio_m3": {
         "name": "Precio del agua"
+      },
+      "ultima_factura": {
+        "name": "Última factura"
+      },
+      "deuda_pendiente": {
+        "name": "Importe pendiente"
+      },
+      "consumo_medio": {
+        "name": "Consumo medio diario"
+      },
+      "dias_proxima_factura": {
+        "name": "Días para la próxima factura"
+      },
+      "embalses": {
+        "name": "Embalses"
+      }
+    },
+    "binary_sensor": {
+      "posible_fuga": {
+        "name": "Posible fuga"
+      },
+      "averia_contador": {
+        "name": "Avería del contador"
+      },
+      "incidencia_pendiente": {
+        "name": "Incidencia pendiente"
+      },
+      "incidencia_cercana": {
+        "name": "Incidencia de red cercana"
       }
     }
   }

@@ -1,0 +1,13 @@
+# Dependencias para la batería de tests unitarios (pytest).
+#
+#   python3 -m venv .venv-test
+#   .venv-test/bin/pip install -r requirements-test.txt
+#   .venv-test/bin/pytest -q
+#
+# pytest-homeassistant-custom-component arrastra la versión de Home Assistant
+# correspondiente (y sus dependencias de test: recorder/SQLAlchemy, etc.),
+# así que fija de facto la versión de HA contra la que se prueba.
+pytest
+pytest-asyncio
+pytest-homeassistant-custom-component
+aioresponses

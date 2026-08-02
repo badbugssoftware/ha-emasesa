@@ -1,0 +1,19 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Preguntas y ayuda
+    url: https://github.com/abrahamfa/ha-emasesa/discussions
+    about: >
+      Para dudas de uso, configuración o "¿esto se puede hacer?", abre una
+      discusión en lugar de una incidencia.
+
+  - name: Comunidad de Home Assistant
+    url: https://community.home-assistant.io/
+    about: >
+      Preguntas generales sobre Home Assistant que no son específicas de esta
+      integración.
+
+  - name: Incidencias con el servicio de EMASESA
+    url: https://www.emasesa.com/atencion-al-cliente/
+    about: >
+      Problemas con tu contrato, tu factura o tu contador: eso lo gestiona
+      EMASESA, no esta integración.

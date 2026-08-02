@@ -39,6 +39,7 @@ from .const import (
     CLIENT_BASIC,
     SISTEMA,
     TOKEN_URL,
+    USER_AGENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -99,7 +100,7 @@ class EmasesaClient:
             # responde 415 (Unsupported Media Type). El grant_type va en la query.
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "*/*",
-            "User-Agent": "okhttp/2.1.0",
+            "User-Agent": USER_AGENT,
         }
         async with self._session.post(TOKEN_URL, headers=headers, data=b"") as resp:
             text = await resp.text()
@@ -134,7 +135,7 @@ class EmasesaClient:
             "Authorization": f"Bearer {app_token}",
             "Content-Type": "application/json; charset=UTF-8",
             "Accept": "*/*",
-            "User-Agent": "okhttp/2.1.0",
+            "User-Agent": USER_AGENT,
         }
         async with self._session.post(
             url, headers=headers, data=json.dumps(body)
@@ -220,7 +221,7 @@ class EmasesaClient:
             "Authorization": f"Bearer {self._user_token}",
             "Content-Type": "application/json; charset=UTF-8",
             "Accept": "*/*",
-            "User-Agent": "okhttp/2.1.0",
+            "User-Agent": USER_AGENT,
         }
         body = {
             "alias": alias,
@@ -253,7 +254,7 @@ class EmasesaClient:
         headers = {
             "Authorization": f"Bearer {self._user_token}",
             "Accept": "*/*",
-            "User-Agent": "okhttp/2.1.0",
+            "User-Agent": USER_AGENT,
         }
         async with self._session.get(url, headers=headers) as resp:
             text = await resp.text()
@@ -263,6 +264,27 @@ class EmasesaClient:
                 return await self._get(path, retry=False)
             if resp.status != 200:
                 raise EmasesaError(f"GET {path} -> {resp.status}: {text[:200]}")
+            return _loads(text)
+
+    async def _post(self, path: str, body: dict[str, Any], retry: bool = True) -> Any:
+        """POST autenticado que devuelve JSON."""
+        await self._ensure_token()
+        url = yarl.URL(f"{API_BASE}{path}", encoded=True)
+        headers = {
+            "Authorization": f"Bearer {self._user_token}",
+            "Content-Type": "application/json; charset=UTF-8",
+            "Accept": "*/*",
+            "User-Agent": USER_AGENT,
+        }
+        async with self._session.post(
+            url, headers=headers, data=json.dumps(body)
+        ) as resp:
+            text = await resp.text()
+            if resp.status == 401 and retry:
+                self._user_token = None
+                return await self._post(path, body, retry=False)
+            if resp.status != 200:
+                raise EmasesaError(f"POST {path} -> {resp.status}: {text[:200]}")
             return _loads(text)
 
     # ------------------------------------------------------------------ #
@@ -336,6 +358,29 @@ class EmasesaClient:
         """
         path = f"/consumos/valoracion_consumo/{contract_id}?sistema={SISTEMA}"
         return await self._get(path)
+
+    async def get_invoices(
+        self, contract_id: str | int, top: int = 3
+    ) -> list[dict[str, Any]]:
+        """Últimas facturas del contrato (importe, estado de cobro, periodo)."""
+        flt = quote(f"contratos_id eq {contract_id}", safe="")
+        path = f"/facturas?sistema={SISTEMA}&$filter={flt}&$top={int(top)}"
+        data = await self._get(path)
+        return data.get("value", []) if isinstance(data, dict) else (data or [])
+
+    async def get_reservoirs(self) -> dict[str, Any]:
+        """Estado de los embalses que abastecen a Sevilla."""
+        return await self._get(f"/info/embalses?sistema={SISTEMA}")
+
+    async def get_network_actions(self) -> list[dict[str, Any]]:
+        """Incidencias y actuaciones en la red (con coordenadas GPS).
+
+        Es un POST con cuerpo vacío, como hace la app.
+        """
+        data = await self._post(f"/red/actuaciones?sistema={SISTEMA}", {})
+        if isinstance(data, dict):
+            return data.get("actuaciones") or []
+        return []
 
     async def simulate_invoice(
         self,

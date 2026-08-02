@@ -1,0 +1,155 @@
+name: Informe de error
+description: Algo no funciona como debería en la integración EMASESA.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por informar del problema.
+
+        **Antes de continuar:**
+        - Comprueba que no haya ya una incidencia abierta sobre lo mismo.
+        - Esta integración usa la API privada de la app *Mi Emasesa*. Si EMASESA
+          cambia su API, la integración puede dejar de funcionar temporalmente.
+        - **Nunca pegues tu usuario, contraseña, tokens ni el número completo de
+          contrato.** Ofusca esos datos antes de enviar logs.
+
+  - type: checkboxes
+    id: comprobaciones
+    attributes:
+      label: Comprobaciones previas
+      options:
+        - label: He buscado y no existe otra incidencia abierta sobre este problema.
+          required: true
+        - label: Uso la última versión publicada de la integración.
+          required: true
+        - label: He eliminado credenciales y datos personales de los logs que adjunto.
+          required: true
+
+  - type: input
+    id: ha_version
+    attributes:
+      label: Versión de Home Assistant
+      description: "Ajustes → Sistema → Reparaciones → ⋮ → Información del sistema"
+      placeholder: "2025.7.2"
+    validations:
+      required: true
+
+  - type: input
+    id: integration_version
+    attributes:
+      label: Versión de la integración EMASESA
+      description: La que aparece en HACS o en `custom_components/emasesa/manifest.json`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: instalacion
+    attributes:
+      label: Tipo de instalación de Home Assistant
+      options:
+        - Home Assistant OS
+        - Home Assistant Supervised
+        - Home Assistant Container (Docker)
+        - Home Assistant Core (venv)
+        - Otro / no lo sé
+    validations:
+      required: true
+
+  - type: dropdown
+    id: nbiot
+    attributes:
+      label: ¿Tu contador es de telelectura NB-IoT?
+      description: >
+        En la app *Mi Emasesa*, si ves la gráfica de consumo por horas o por días,
+        tu contador es de telelectura. Si sólo ves las lecturas de las facturas,
+        no lo es y esta integración no podrá traer consumos horarios.
+      options:
+        - "Sí: en la app veo consumo por horas/días"
+        - "No: en la app sólo veo lecturas de facturas"
+        - No lo sé
+    validations:
+      required: true
+
+  - type: dropdown
+    id: metodo_instalacion
+    attributes:
+      label: ¿Cómo instalaste la integración?
+      options:
+        - HACS
+        - Copia manual en custom_components/
+    validations:
+      required: true
+
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: Descripción del problema
+      description: Qué esperabas que ocurriera y qué ocurre en realidad.
+    validations:
+      required: true
+
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducirlo
+      placeholder: |
+        1. Voy a Ajustes → Dispositivos y servicios → Añadir integración → EMASESA
+        2. Introduzco usuario y contraseña
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: entidades
+    attributes:
+      label: Entidades afectadas
+      description: >
+        Qué sensores fallan o muestran datos incorrectos, y qué valor muestran
+        frente al que aparece en la app oficial.
+      placeholder: |
+        sensor.emasesa_xxxx_indice_del_contador → 1234 m³ (la app dice 1250 m³)
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs relevantes
+      description: |
+        Activa el log de depuración añadiendo esto a `configuration.yaml`,
+        reinicia y reproduce el problema:
+
+        ```yaml
+        logger:
+          default: warning
+          logs:
+            custom_components.emasesa: debug
+        ```
+
+        Después pega aquí las líneas de `home-assistant.log` que contengan
+        `emasesa`. **Revisa que no incluyan credenciales ni tokens.**
+      render: txt
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostico
+    attributes:
+      label: Diagnóstico de la integración (opcional)
+      description: >
+        Ajustes → Dispositivos y servicios → EMASESA → ⋮ → Descargar diagnóstico.
+        Adjunta el fichero arrastrándolo a este cuadro.
+    validations:
+      required: false
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto adicional
+      description: Cualquier otra cosa que pueda ayudar (capturas, cambios recientes, etc.).
+    validations:
+      required: false

@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
+from homeassistant.util.location import distance
 
 from .api import (
     EmasesaAuthError,
@@ -26,9 +27,15 @@ from .api import (
 )
 from .const import (
     ATTRIBUTION,
+    DEFAULT_INCIDENT_RADIUS,
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
+    LEAK_HOUR_END,
+    LEAK_HOUR_START,
+    LEAK_MIN_LITERS,
+    LEAK_NIGHTS,
     LITERS_PER_M3,
+    MAX_BACKFILL_DAYS,
     UPDATE_BACKFILL_DAYS,
 )
 
@@ -55,6 +62,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         client: EmasesaClient,
         contract_id: str,
         scan_interval: timedelta,
+        incident_radius_m: int = DEFAULT_INCIDENT_RADIUS,
     ) -> None:
         super().__init__(
             hass,
@@ -66,6 +74,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.contract_id = str(contract_id)
         self.statistic_id = f"{DOMAIN}:{self.contract_id}_water"
         self.cost_statistic_id = f"{DOMAIN}:{self.contract_id}_water_cost"
+        self.incident_radius_m = incident_radius_m
         self._tz = None
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -111,9 +120,14 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if isinstance(val, dict):
                 consumo_periodo_m3 = val.get("consumo")
                 f_ini = val.get("fechaFinUltimaFactura")
+                valoracion = val.get("valoracionConsumo") or {}
                 periodo = {
                     "desde": f_ini,
                     "proxima_factura": val.get("fechaProximaFacturacion"),
+                    "ultima_telelectura": val.get("fechaUltimaTelelectura"),
+                    "consumo_medio_l_dia": val.get("consumoMedio"),
+                    "valoracion": valoracion.get("valoracion"),
+                    "valoracion_texto": valoracion.get("texto"),
                 }
                 if consumo_periodo_m3 and f_ini:
                     hoy = dt_util.now().date().strftime("%Y-%m-%d")
@@ -136,12 +150,30 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Importa las estadísticas (consumo + coste) ya con el precio €/m³.
         await self._import_statistics(list(days_data.values()), precio_m3)
 
+        # --- Extras (no críticos: si fallan, la integración sigue) ----------
+        factura = await self._safe(self._fetch_last_invoice(), "facturas") or {}
+        embalses = await self._safe(self._fetch_reservoirs(), "embalses") or {}
+        incidencias = await self._safe(
+            self._fetch_nearby_incidents(), "incidencias de red"
+        ) or {}
+        fuga = self._detect_leak(list(days_data.values()))
+
         return {
             "contract_id": self.contract_id,
             "coste_periodo_eur": coste_periodo,
             "precio_m3_eur": precio_m3,
             "consumo_periodo_m3": consumo_periodo_m3,
             "periodo_facturacion": periodo,
+            "factura": factura,
+            "embalses": embalses,
+            "incidencias": incidencias,
+            "fuga": fuga,
+            "averia_estimacion": bool(meter_raw.get("averiaForzarEstimacion"))
+            if isinstance(meter_raw, dict)
+            else False,
+            "incidencia_pendiente": bool(meter_raw.get("incidenciaOTPendienteUsuario"))
+            if isinstance(meter_raw, dict)
+            else False,
             "fecha": today.get("fecha"),
             "consumo_hoy_l": today.get("consumo"),
             "consumo_diurno_l": today.get("consumo_diurno"),
@@ -156,6 +188,134 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "numero_serie": contador.get("numeroSerie"),
                 "nbiot": contador.get("nbiot"),
             },
+        }
+
+    async def async_reload_history(self, days: int) -> None:
+        """Reimporta el histórico de los últimos `days` días (servicio)."""
+        date_to = dt_util.now().date()
+        date_from = date_to - timedelta(days=days)
+        history = await self._fetch_history_chunked(date_from, date_to)
+        precio = (self.data or {}).get("precio_m3_eur")
+        await self._import_statistics(
+            [d for d in history if isinstance(d, dict) and d.get("fecha")], precio
+        )
+        _LOGGER.info("Histórico de EMASESA reimportado: %s días", days)
+
+    async def _safe(self, coro, what: str) -> Any:
+        """Ejecuta una llamada opcional; si falla, avisa y devuelve None.
+
+        Estos datos son complementarios: un fallo suyo no debe tumbar la
+        actualización del consumo, que es lo importante.
+        """
+        try:
+            return await coro
+        except EmasesaError as err:
+            _LOGGER.debug("No se pudo obtener %s: %s", what, err)
+            return None
+
+    async def _fetch_last_invoice(self) -> dict[str, Any]:
+        """Última factura emitida + deuda pendiente total."""
+        facturas = await self.client.get_invoices(self.contract_id, top=6)
+        if not facturas:
+            return {}
+        ultima = facturas[0]
+        pendiente = sum(
+            float(f.get("importe_pendiente") or 0)
+            for f in facturas
+            if str(f.get("estado_cobro_codigo", "")).upper() == "P"
+        )
+        return {
+            "numero": ultima.get("numero_factura"),
+            "importe": ultima.get("total_con_iva"),
+            "fecha_emision": ultima.get("fecha_emision"),
+            "estado_cobro": ultima.get("estado_cobro_texto"),
+            "consumo_m3": ultima.get("consumo"),
+            "dias": ultima.get("consumo_dias"),
+            "periodo_desde": ultima.get("fecha_inicio_periodo"),
+            "periodo_hasta": ultima.get("fecha_fin_periodo"),
+            "pendiente_total": round(pendiente, 2),
+        }
+
+    async def _fetch_reservoirs(self) -> dict[str, Any]:
+        """Embalses que abastecen a Sevilla (% de llenado conjunto)."""
+        data = await self.client.get_reservoirs()
+        embalses = (data or {}).get("embalses") or []
+        vol = sum(float(e.get("vol_embalsado") or 0) for e in embalses)
+        cap = sum(float(e.get("capacidad") or 0) for e in embalses)
+        return {
+            "fecha": (data or {}).get("fecha"),
+            "porc_llenado": round(vol / cap * 100, 1) if cap else None,
+            "vol_embalsado_hm3": round(vol, 2),
+            "capacidad_hm3": round(cap, 2),
+            "detalle": {
+                e.get("embalse"): e.get("porc_llenado")
+                for e in embalses
+                if e.get("embalse")
+            },
+        }
+
+    async def _fetch_nearby_incidents(self) -> dict[str, Any]:
+        """Incidencias de la red de EMASESA cercanas a la vivienda."""
+        actuaciones = await self.client.get_network_actions()
+        home_lat = self.hass.config.latitude
+        home_lon = self.hass.config.longitude
+        cercanas: list[dict[str, Any]] = []
+        for act in actuaciones:
+            lat, lon = act.get("latitud"), act.get("longitud")
+            if lat is None or lon is None:
+                continue
+            dist = distance(home_lat, home_lon, float(lat), float(lon))
+            if dist is not None and dist <= self.incident_radius_m:
+                cercanas.append(
+                    {
+                        "categoria": act.get("categoria"),
+                        "direccion": act.get("direccion"),
+                        "inicio": act.get("inicio"),
+                        "tipo": act.get("tipo_actuacion"),
+                        "distancia_m": round(dist),
+                    }
+                )
+        cercanas.sort(key=lambda x: x["distancia_m"])
+        return {
+            "total_ciudad": len(actuaciones),
+            "cercanas": cercanas,
+            "radio_m": self.incident_radius_m,
+        }
+
+    def _detect_leak(self, days: list[dict[str, Any]]) -> dict[str, Any]:
+        """Posible fuga: consumo continuo en TODAS las horas de madrugada.
+
+        Un hogar normal tiene al menos una hora sin consumo entre las 02:00 y
+        las 05:00. Si durante varios días seguidos no hay ninguna hora a cero,
+        suele indicar un goteo permanente (cisterna, grifo, tubería).
+        """
+        completos = [
+            d for d in days
+            if isinstance(d.get("detalle"), list) and len(d["detalle"]) >= 24
+        ]
+        completos.sort(key=lambda d: d.get("fecha", ""))
+        recientes = completos[-LEAK_NIGHTS:]
+        if len(recientes) < LEAK_NIGHTS:
+            return {"detectada": False, "noches": 0, "min_l_h": None}
+
+        minimos: list[float] = []
+        for day in recientes:
+            franja = [
+                float(h.get("consumo") or 0)
+                for h in day["detalle"]
+                if str(h.get("hora", "")).isdigit()
+                and LEAK_HOUR_START <= int(h["hora"]) <= LEAK_HOUR_END
+            ]
+            if not franja:
+                return {"detectada": False, "noches": 0, "min_l_h": None}
+            minimos.append(min(franja))
+
+        detectada = all(m >= LEAK_MIN_LITERS for m in minimos)
+        return {
+            "detectada": detectada,
+            "noches": len(minimos),
+            "min_l_h": min(minimos) if minimos else None,
+            "desde": recientes[0].get("fecha") if detectada else None,
         }
 
     async def _fetch_history_chunked(

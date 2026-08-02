@@ -1,6 +1,57 @@
+# --- Python ---------------------------------------------------------------
 __pycache__/
 *.py[cod]
-.DS_Store
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Entornos virtuales ----------------------------------------------------
 .venv/
+venv/
+env/
+ENV/
+
+# --- Herramientas y cachés -------------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- Editores e IDE --------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Sistema operativo -----------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# --- Home Assistant (pruebas locales) --------------------------------------
+config/
+.storage/
+home-assistant.log*
+home-assistant_v2.db*
+home-assistant.log.fault
+
+# --- Artefactos y datos sensibles ------------------------------------------
 *.log
+*.zip
 emasesa-hacs.zip
+secrets.yaml
+.env
+*.har
+*.apk
