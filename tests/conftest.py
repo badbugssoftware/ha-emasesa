@@ -17,6 +17,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import aiohttp
 import pytest
@@ -53,7 +54,7 @@ def _patch_aioresponses_for_modern_aiohttp() -> None:
         _emasesa_compat = True
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
-            kwargs.setdefault("stream_writer", None)
+            kwargs.setdefault("stream_writer", Mock(output_size=0))
             super().__init__(*args, **kwargs)
 
     aioresponses_core.ClientResponse = _CompatClientResponse

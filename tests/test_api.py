@@ -45,7 +45,6 @@ from .conftest import (
     PASSWORD,
     USER_TOKEN,
     USERNAME,
-    FakeSession,
     day_2026_07_31,
 )
 
