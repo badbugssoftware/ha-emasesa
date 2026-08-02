@@ -36,6 +36,7 @@ from .const import (
     DOMAIN,
     MAX_INCIDENT_RADIUS,
     MIN_INCIDENT_RADIUS,
+    MAX_SCAN_MINUTES,
     MIN_SCAN_MINUTES,
 )
 
@@ -301,7 +302,7 @@ class EmasesaOptionsFlow(OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_SCAN_MINUTES, default=current): vol.All(
-                        vol.Coerce(int), vol.Range(min=MIN_SCAN_MINUTES, max=1440)
+                        vol.Coerce(int), vol.Range(min=MIN_SCAN_MINUTES, max=MAX_SCAN_MINUTES)
                     ),
                     vol.Required(CONF_INCIDENT_RADIUS, default=radius): vol.All(
                         vol.Coerce(int),

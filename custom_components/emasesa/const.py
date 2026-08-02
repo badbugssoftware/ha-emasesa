@@ -32,12 +32,16 @@ CONF_CONTRACT_ID = "contrato_id"
 CONF_CONTRACT_NUMBER = "contrato_numero"
 CONF_SUPPLY_ADDRESS = "direccion_suministro"
 CONF_SCAN_MINUTES = "scan_minutes"
+# Opción de versiones antiguas, migrada a CONF_SCAN_MINUTES en el arranque.
+LEGACY_CONF_SCAN_HOURS = "scan_hours"
 
 # --- Valores por defecto ---------------------------------------------------
-# El consumo por telelectura se consolida como mucho cada hora (y con 1-2 días
-# de retraso), así que no tiene sentido pollear muy a menudo. Mínimo 30 min.
-DEFAULT_SCAN_MINUTES = 45
-MIN_SCAN_MINUTES = 15
+# La telelectura NB-IoT publica con varias horas de retraso, así que sondear a
+# menudo no adelanta el dato: solo multiplica las peticiones contra una API
+# privada (cada ciclo son ~10 llamadas). Con 3 h son ~8 ciclos al día.
+DEFAULT_SCAN_MINUTES = 180
+MIN_SCAN_MINUTES = 30
+MAX_SCAN_MINUTES = 1440
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=DEFAULT_SCAN_MINUTES)
 
 # Días de histórico horario a importar en el primer arranque (backfill).

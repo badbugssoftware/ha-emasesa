@@ -1,6 +1,7 @@
 """Integración EMASESA (Aguas de Sevilla) para Home Assistant."""
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 from typing import Any
 
@@ -31,13 +32,44 @@ from .const import (
     DEFAULT_SCAN_MINUTES,
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
+    LEGACY_CONF_SCAN_HOURS,
+    MAX_SCAN_MINUTES,
+    MIN_SCAN_MINUTES,
     PLATFORMS,
 )
 from .coordinator import EmasesaCoordinator
 
+_LOGGER = logging.getLogger(__name__)
+
+
+@callback
+def _migrate_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Convierte opciones de versiones anteriores.
+
+    'scan_hours' (horas) se sustituyó por 'scan_minutes'. Sin esta migración
+    el ajuste del usuario quedaba huérfano y se aplicaba el valor por defecto.
+    """
+    options = dict(entry.options)
+    legacy = options.pop(LEGACY_CONF_SCAN_HOURS, None)
+    if legacy is None:
+        return
+    if CONF_SCAN_MINUTES not in options:
+        options[CONF_SCAN_MINUTES] = max(
+            MIN_SCAN_MINUTES, min(int(legacy) * 60, MAX_SCAN_MINUTES)
+        )
+    _LOGGER.debug(
+        "Migrada la opción %s=%s a %s=%s",
+        LEGACY_CONF_SCAN_HOURS,
+        legacy,
+        CONF_SCAN_MINUTES,
+        options.get(CONF_SCAN_MINUTES),
+    )
+    hass.config_entries.async_update_entry(entry, options=options)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configura una entrada (un contrato de EMASESA)."""
+    _migrate_options(hass, entry)
     client = EmasesaClient(
         async_get_clientsession(hass),
         entry.data[CONF_USERNAME],
