@@ -5,9 +5,10 @@ se construye el coordinador con `__new__` (saltándose `DataUpdateCoordinator.
 __init__`, que sí necesita un `hass` real) y se parchean las dos únicas puertas
 al recorder: `async_add_external_statistics` y `_last_stat`.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
@@ -19,19 +20,18 @@ pytest.importorskip(
     reason="Home Assistant no está instalado (pip install -r requirements-test.txt)",
 )
 
-from homeassistant.util import dt as dt_util  # noqa: E402
-
-from custom_components.emasesa import coordinator as coordinator_module  # noqa: E402
-from custom_components.emasesa.const import (  # noqa: E402
+from custom_components.emasesa import coordinator as coordinator_module
+from custom_components.emasesa.const import (
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
     LITERS_PER_M3,
     MAX_BACKFILL_DAYS,
     UPDATE_BACKFILL_DAYS,
 )
-from custom_components.emasesa.coordinator import EmasesaCoordinator  # noqa: E402
+from custom_components.emasesa.coordinator import EmasesaCoordinator
+from homeassistant.util import dt as dt_util
 
-from .conftest import (  # noqa: E402
+from .conftest import (
     CONTRACT_ID,
     build_day,
     day_2026_07_30,
@@ -40,8 +40,8 @@ from .conftest import (  # noqa: E402
 )
 
 MADRID = ZoneInfo("Europe/Madrid")
-PRECIO_ALTO = 2.5   # €/m³ al principio del ciclo (cuota fija muy repartida)
-PRECIO_BAJO = 1.8   # €/m³ más adelante: el precio efectivo BAJA
+PRECIO_ALTO = 2.5  # €/m³ al principio del ciclo (cuota fija muy repartida)
+PRECIO_BAJO = 1.8  # €/m³ más adelante: el precio efectivo BAJA
 
 
 # --------------------------------------------------------------------------- #
@@ -55,9 +55,7 @@ def stats_calls(monkeypatch) -> list[tuple[dict, list[dict]]]:
     def _fake(hass, metadata, stats):
         calls.append((dict(metadata), [dict(s) for s in stats]))
 
-    monkeypatch.setattr(
-        coordinator_module, "async_add_external_statistics", _fake
-    )
+    monkeypatch.setattr(coordinator_module, "async_add_external_statistics", _fake)
     return calls
 
 
@@ -84,14 +82,16 @@ def _by_id(calls, statistic_id) -> list[dict[str, Any]]:
 
 
 def _es_monotona(valores) -> bool:
-    return all(b >= a for a, b in zip(valores, valores[1:]))
+    return all(b >= a for a, b in zip(valores, valores[1:], strict=False))
 
 
 # --------------------------------------------------------------------------- #
 # Consumo: 'sum' monotónica a partir del índice del contador
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-async def test_import_statistics_sum_monotonica_en_m3(coordinator, stats_calls, sample_day):
+async def test_import_statistics_sum_monotonica_en_m3(
+    coordinator, stats_calls, sample_day
+):
     await coordinator._import_statistics([sample_day])
 
     assert len(stats_calls) == 1, "sin precio no debe importarse coste"
@@ -106,32 +106,30 @@ async def test_import_statistics_sum_monotonica_en_m3(coordinator, stats_calls, 
 
     # state = lectura real de esa hora en m³; sum = máximo acumulado.
     detalle = sample_day["detalle"]
-    assert [s["state"] for s in stats] == [
-        h["indice"] / LITERS_PER_M3 for h in detalle
-    ]
+    assert [s["state"] for s in stats] == [h["indice"] / LITERS_PER_M3 for h in detalle]
     assert stats[0]["sum"] == pytest.approx(443.585)
     assert stats[-1]["sum"] == pytest.approx(443.601)
 
     sums = [s["sum"] for s in stats]
     assert _es_monotona(sums)
     # El consumo del día que deduce el panel de Energía = 16 L.
-    assert (sums[-1] - sums[0]) * LITERS_PER_M3 == pytest.approx(
-        sample_day["consumo"]
-    )
+    assert (sums[-1] - sums[0]) * LITERS_PER_M3 == pytest.approx(sample_day["consumo"])
 
 
 @pytest.mark.asyncio
-async def test_import_statistics_convierte_hora_local_a_utc(coordinator, stats_calls, sample_day):
+async def test_import_statistics_convierte_hora_local_a_utc(
+    coordinator, stats_calls, sample_day
+):
     """Julio en Madrid es UTC+2: la hora local 00 es 22:00 UTC del día anterior."""
     await coordinator._import_statistics([sample_day])
     _, stats = stats_calls[0]
 
     starts = [s["start"] for s in stats]
-    assert starts[0] == datetime(2026, 7, 30, 22, 0, tzinfo=timezone.utc)
-    assert starts[-1] == datetime(2026, 7, 31, 21, 0, tzinfo=timezone.utc)
+    assert starts[0] == datetime(2026, 7, 30, 22, 0, tzinfo=UTC)
+    assert starts[-1] == datetime(2026, 7, 31, 21, 0, tzinfo=UTC)
     assert all(s.tzinfo is not None for s in starts)
     assert all(
-        b - a == timedelta(hours=1) for a, b in zip(starts, starts[1:])
+        b - a == timedelta(hours=1) for a, b in zip(starts, starts[1:], strict=False)
     )
 
 
@@ -171,13 +169,13 @@ async def test_import_statistics_ordena_los_dias(coordinator, stats_calls):
 @pytest.mark.asyncio
 async def test_import_statistics_ignora_entradas_incompletas(coordinator, stats_calls):
     dia = day_2026_07_31()
-    dia["detalle"][3]["indice"] = None       # hueco de telelectura
+    dia["detalle"][3]["indice"] = None  # hueco de telelectura
     dia["detalle"][4].pop("hora")
     dias = [
         dia,
-        {"fecha": "2026-07-29"},              # sin detalle
+        {"fecha": "2026-07-29"},  # sin detalle
         {"detalle": [{"hora": "00", "indice": 1}]},  # sin fecha
-        {"fecha": "2026-07-28", "detalle": "KO"},    # detalle no es lista
+        {"fecha": "2026-07-28", "detalle": "KO"},  # detalle no es lista
     ]
 
     await coordinator._import_statistics(dias)
@@ -207,8 +205,7 @@ async def test_coste_se_acumula_por_incrementos(coordinator, stats_calls, sample
 
     coste = _by_id(stats_calls, f"{DOMAIN}:{CONTRACT_ID}_water_cost")
     metadata = next(
-        m for m, _ in stats_calls
-        if m["statistic_id"].endswith("_water_cost")
+        m for m, _ in stats_calls if m["statistic_id"].endswith("_water_cost")
     )
     assert metadata["unit_of_measurement"] == "EUR"
     assert metadata["has_sum"] is True
@@ -227,7 +224,9 @@ async def test_coste_se_acumula_por_incrementos(coordinator, stats_calls, sample
 
 
 @pytest.mark.asyncio
-async def test_sin_precio_no_hay_estadistica_de_coste(coordinator, stats_calls, sample_day):
+async def test_sin_precio_no_hay_estadistica_de_coste(
+    coordinator, stats_calls, sample_day
+):
     await coordinator._import_statistics([sample_day], None)
     assert _by_id(stats_calls, f"{DOMAIN}:{CONTRACT_ID}_water_cost") == []
     coordinator._last_stat.assert_not_awaited()
@@ -262,7 +261,9 @@ async def test_coste_nunca_decrece_al_reimportar_con_precio_menor(
         return_value={"sum": ultimo_sum, "start": ultimo_ts}
     )
     dia_nuevo = build_day(
-        "2026-08-01", 443601, [0, 0, 0, 0, 0, 0, 2, 0]  # día en curso, parcial
+        "2026-08-01",
+        443601,
+        [0, 0, 0, 0, 0, 0, 2, 0],  # día en curso, parcial
     )
     await coordinator._import_statistics(
         [day_2026_07_30(), day_2026_07_31(), dia_nuevo], PRECIO_BAJO
@@ -333,21 +334,23 @@ async def test_dst_octubre_hora_02_duplicada_no_colisiona(coordinator, stats_cal
     assert len(set(starts)) == 25, "las dos horas 02 deben caer en instantes distintos"
 
     # 02 CEST -> 00:00 UTC ; 02 CET (fold=1) -> 01:00 UTC.
-    assert starts[2] == datetime(2026, 10, 25, 0, 0, tzinfo=timezone.utc)
-    assert starts[3] == datetime(2026, 10, 25, 1, 0, tzinfo=timezone.utc)
+    assert starts[2] == datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
+    assert starts[3] == datetime(2026, 10, 25, 1, 0, tzinfo=UTC)
     assert starts[3] - starts[2] == timedelta(hours=1)
 
     # Día completo sin huecos ni solapes.
     assert starts == sorted(starts)
-    assert all(b - a == timedelta(hours=1) for a, b in zip(starts, starts[1:]))
+    assert all(
+        b - a == timedelta(hours=1) for a, b in zip(starts, starts[1:], strict=False)
+    )
     assert _es_monotona([s["sum"] for s in stats])
 
 
 def test_dst_sin_fold_las_dos_horas_02_colisionarian():
     """Control: sin `fold=1` ambas lecturas caerían en el mismo instante UTC."""
     naive = datetime(2026, 10, 25, 2, 0)
-    sin_fold = naive.replace(tzinfo=MADRID).astimezone(timezone.utc)
-    con_fold = naive.replace(tzinfo=MADRID, fold=1).astimezone(timezone.utc)
+    sin_fold = naive.replace(tzinfo=MADRID).astimezone(UTC)
+    con_fold = naive.replace(tzinfo=MADRID, fold=1).astimezone(UTC)
     assert sin_fold != con_fold
     assert con_fold - sin_fold == timedelta(hours=1)
 
@@ -379,9 +382,7 @@ async def test_days_to_backfill_hueco_corto_usa_la_ventana_normal(coordinator):
         return_value={"start": hace_dos_dias.timestamp(), "sum": 443.601}
     )
     assert await coordinator._days_to_backfill() == UPDATE_BACKFILL_DAYS
-    coordinator._last_stat.assert_awaited_once_with(
-        f"{DOMAIN}:{CONTRACT_ID}_water"
-    )
+    coordinator._last_stat.assert_awaited_once_with(f"{DOMAIN}:{CONTRACT_ID}_water")
 
 
 @pytest.mark.asyncio
@@ -423,5 +424,7 @@ async def test_fetch_history_chunked_trocea_en_30_dias(coordinator):
     ]
     # Tramos contiguos y sin solape.
     assert rangos[1][0] - rangos[0][1] == timedelta(days=1)
-    assert all(c.args[0] == CONTRACT_ID for c in
-               coordinator.client.get_consumption.await_args_list)
+    assert all(
+        c.args[0] == CONTRACT_ID
+        for c in coordinator.client.get_consumption.await_args_list
+    )

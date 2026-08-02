@@ -3,15 +3,23 @@
 Los payloads reproducen la forma REAL de las respuestas de la API privada de
 la app "Mi Emasesa" (reverseada), p. ej.::
 
-    {"fecha": "2026-07-31", "consumo": 16, "indice": 443601, "estado": "OK",
-     "detalle": [{"hora": "00", "consumo": 0, "indice": 443585,
-                  "nocturno": false}, ...]}
+    {
+        "fecha": "2026-07-31",
+        "consumo": 16,
+        "indice": 443601,
+        "estado": "OK",
+        "detalle": [
+            {"hora": "00", "consumo": 0, "indice": 443585, "nocturno": false},
+            ...,
+        ],
+    }
 
 Todo (consumos e índice del contador) viene en LITROS.
 
 Estos tests no necesitan una instancia de Home Assistant corriendo: importan
 los módulos de la integración directamente.
 """
+
 from __future__ import annotations
 
 import sys
@@ -91,12 +99,60 @@ ONLINE_USER_ID = 862417
 NIGHT_HOURS = frozenset({"00", "01", "02", "03", "04", "05", "06"})
 
 # Perfil horario realista de un día de verano: 16 L en total.
-CONSUMOS_2026_07_31 = [0, 0, 0, 0, 0, 0, 1, 3, 0, 0, 0, 2,
-                       0, 0, 0, 0, 0, 4, 0, 0, 5, 1, 0, 0]
+CONSUMOS_2026_07_31 = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    3,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    4,
+    0,
+    0,
+    5,
+    1,
+    0,
+    0,
+]
 INDICE_INICIAL_2026_07_31 = 443585
 
-CONSUMOS_2026_07_30 = [0, 0, 0, 0, 0, 0, 2, 6, 1, 0, 0, 3,
-                       0, 0, 0, 0, 1, 7, 2, 0, 4, 0, 0, 0]
+CONSUMOS_2026_07_30 = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    6,
+    1,
+    0,
+    0,
+    3,
+    0,
+    0,
+    0,
+    0,
+    1,
+    7,
+    2,
+    0,
+    4,
+    0,
+    0,
+    0,
+]
 INDICE_INICIAL_2026_07_30 = 443559
 
 
@@ -124,7 +180,7 @@ def build_day(
 
     detalle: list[dict[str, Any]] = []
     indice = indice_inicial
-    for hora, consumo in zip(horas, consumos):
+    for hora, consumo in zip(horas, consumos, strict=False):
         detalle.append(
             {
                 "hora": hora,
@@ -146,16 +202,12 @@ def build_day(
 
 def day_2026_07_31() -> dict[str, Any]:
     """Día de ejemplo idéntico al de la respuesta real (indice final 443601)."""
-    return build_day(
-        "2026-07-31", INDICE_INICIAL_2026_07_31, list(CONSUMOS_2026_07_31)
-    )
+    return build_day("2026-07-31", INDICE_INICIAL_2026_07_31, list(CONSUMOS_2026_07_31))
 
 
 def day_2026_07_30() -> dict[str, Any]:
     """Día anterior, encadenado con el de 31/07 (443559 -> 443585)."""
-    return build_day(
-        "2026-07-30", INDICE_INICIAL_2026_07_30, list(CONSUMOS_2026_07_30)
-    )
+    return build_day("2026-07-30", INDICE_INICIAL_2026_07_30, list(CONSUMOS_2026_07_30))
 
 
 def day_dst_octubre(indice_inicial: int = 500000) -> dict[str, Any]:
@@ -164,12 +216,37 @@ def day_dst_octubre(indice_inicial: int = 500000) -> dict[str, Any]:
     La hora local "02" aparece DOS veces (02:00 CEST y 02:00 CET).
     """
     horas = (
-        [f"{h:02d}" for h in range(3)]          # 00, 01, 02  (CEST)
-        + ["02"]                                 # 02 repetida (CET)
-        + [f"{h:02d}" for h in range(3, 24)]     # 03..23
+        [f"{h:02d}" for h in range(3)]  # 00, 01, 02  (CEST)
+        + ["02"]  # 02 repetida (CET)
+        + [f"{h:02d}" for h in range(3, 24)]  # 03..23
     )
-    consumos = [0, 0, 1, 2, 0, 0, 3, 8, 5, 0, 1, 4,
-                2, 0, 0, 0, 6, 9, 3, 1, 0, 2, 0, 0, 0]
+    consumos = [
+        0,
+        0,
+        1,
+        2,
+        0,
+        0,
+        3,
+        8,
+        5,
+        0,
+        1,
+        4,
+        2,
+        0,
+        0,
+        0,
+        6,
+        9,
+        3,
+        1,
+        0,
+        2,
+        0,
+        0,
+        0,
+    ]
     return build_day("2026-10-25", indice_inicial, consumos, horas=horas)
 
 
@@ -254,7 +331,7 @@ class _FakeResponse:
     async def text(self) -> str:
         return self._text
 
-    async def __aenter__(self) -> "_FakeResponse":
+    async def __aenter__(self) -> _FakeResponse:
         return self
 
     async def __aexit__(self, *exc: object) -> bool:

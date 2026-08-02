@@ -137,6 +137,10 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         try:
             self._contracts = await self._client.get_contracts()
+        except EmasesaTwoFactorRequired:
+            # La sesión caducó y el dispositivo aún no es de confianza: pedir
+            # otro código en vez de abortar con un "cannot_connect" engañoso.
+            return await self.async_step_2fa()
         except EmasesaError:
             return self.async_abort(reason="cannot_connect")
 

@@ -220,8 +220,16 @@ class EmasesaClient:
         Igual que la app oficial tras el primer acceso: una vez registrado,
         los logins posteriores con el mismo device_id NO exigen doble factor.
         Sin esto, el coordinator volvería a pedir 2FA en cada arranque.
+
+        Usa el token que ya hay en memoria y NUNCA reautentica: se llama justo
+        después de validar el doble factor y, como el dispositivo todavía no es
+        de confianza, un login nuevo aquí volvería a exigir un código y
+        rompería el alta.
         """
-        await self._ensure_token()
+        if not self._user_token:
+            raise EmasesaError(
+                "No hay sesión activa para registrar el dispositivo de confianza"
+            )
         url = (
             f"{API_BASE}/dispositivos?sistema={SISTEMA}"
             f"&usuario={quote(self._username, safe='')}"

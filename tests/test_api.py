@@ -7,6 +7,7 @@ Cubren las tres cosas que más se han roto en la práctica:
   * la interpretación de las tres respuestas posibles de autenticarUsuario,
   * la codificación literal del `$filter` de OData (%20 y %27, nunca '+').
 """
+
 from __future__ import annotations
 
 import json
@@ -45,6 +46,7 @@ from .conftest import (
     PASSWORD,
     USER_TOKEN,
     USERNAME,
+    FakeSession,
     day_2026_07_31,
 )
 
@@ -248,8 +250,7 @@ async def test_get_contracts_codifica_filter_con_percent20_y_percent27(fake_sess
     filtro = path.split("$filter=")[1].split("&")[0]
 
     assert filtro == (
-        f"usuarios_online_id%20eq%20{ONLINE_USER_ID}"
-        "%20and%20relacion%20ne%20%27AF%27"
+        f"usuarios_online_id%20eq%20{ONLINE_USER_ID}%20and%20relacion%20ne%20%27AF%27"
     )
     # Los espacios NUNCA como '+': algunos parsers OData lo rechazan.
     assert "+" not in filtro
@@ -258,9 +259,7 @@ async def test_get_contracts_codifica_filter_con_percent20_y_percent27(fake_sess
 
     # El $orderby conserva las comas sin codificar y los espacios como %20.
     orderby = path.split("$orderby=")[1].split("&")[0]
-    assert orderby == (
-        "favorito%20desc,vigente%20desc,poblacion,direccion_suministro"
-    )
+    assert orderby == ("favorito%20desc,vigente%20desc,poblacion,direccion_suministro")
     assert "+" not in orderby
 
     assert f"sistema={SISTEMA}" in path
@@ -382,9 +381,7 @@ async def test_get_reintenta_una_vez_ante_401(fake_session):
     client.login = AsyncMock(
         side_effect=lambda pin=None: setattr(client, "_user_token", "nuevo")
     )
-    fake_session.responses.extend(
-        [(401, ""), (200, json.dumps({"indice": 443.601}))]
-    )
+    fake_session.responses.extend([(401, ""), (200, json.dumps({"indice": 443.601}))])
 
     data = await client._get(f"/lecturas/informacion/{CONTRACT_ID}")
 
@@ -435,7 +432,7 @@ async def test_register_trusted_device_manda_confianza_s(fake_session):
         ("2026-07-31", "09", datetime(2026, 7, 31, 9, 0)),
         ("2026-07-31", "23", datetime(2026, 7, 31, 23, 0)),
         ("2026-10-25", "02", datetime(2026, 10, 25, 2, 0)),
-        ("2026-01-01", "0", datetime(2026, 1, 1, 0, 0)),   # sin cero delante
+        ("2026-01-01", "0", datetime(2026, 1, 1, 0, 0)),  # sin cero delante
         ("2026-12-31", "7", datetime(2026, 12, 31, 7, 0)),
     ],
 )
@@ -467,3 +464,29 @@ def test_loads_json_valido():
         "fecha": "2026-07-31",
         "indice": 443601,
     }
+
+
+@pytest.mark.asyncio
+async def test_register_trusted_device_no_reautentica(monkeypatch):
+    """Regresión: registrar el dispositivo NO debe disparar un login nuevo.
+
+    Se llama justo tras validar el doble factor y, como el dispositivo todavía
+    no es de confianza, un login aquí volvería a exigir código y rompería el
+    alta (traceback real: _after_login -> register_trusted_device ->
+    _ensure_token -> login -> EmasesaTwoFactorRequired).
+    """
+    session = FakeSession([])
+    client = EmasesaClient(session, USERNAME, PASSWORD, DEVICE_ID)
+
+    llamadas = []
+
+    async def _login_espia(*args, **kwargs):
+        llamadas.append(kwargs)
+        raise AssertionError("register_trusted_device no debe reautenticar")
+
+    monkeypatch.setattr(client, "login", _login_espia)
+
+    # Sin sesión previa: error claro, pero NUNCA un login.
+    with pytest.raises(EmasesaError):
+        await client.register_trusted_device()
+    assert llamadas == []
