@@ -10,6 +10,7 @@ agradece de verdad.
 - [Informar de un error](#informar-de-un-error)
 - [Proponer una función](#proponer-una-función)
 - [Entorno de desarrollo](#entorno-de-desarrollo)
+- [Tests](#tests)
 - [Estilo y convenciones](#estilo-y-convenciones)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Trabajar con la API privada](#trabajar-con-la-api-privada)
@@ -76,8 +77,8 @@ suministro. Todo lo que implique **operaciones de escritura** en la cuenta de EM
 
 ## Entorno de desarrollo
 
-No hay dependencias propias (`requirements` está vacío en el `manifest.json`): todo lo que
-se usa viene con Home Assistant.
+La integración no tiene dependencias propias (`requirements` está vacío en el
+`manifest.json`): todo lo que usa viene con Home Assistant.
 
 ```bash
 git clone https://github.com/abrahamfa/ha-emasesa.git
@@ -85,7 +86,7 @@ cd ha-emasesa
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install homeassistant ruff
+pip install ruff
 ```
 
 Para probar en tu instalación, lo más cómodo es enlazar la carpeta del componente dentro
@@ -99,17 +100,42 @@ Después reinicia Home Assistant. Si cambias `manifest.json`, `strings.json` o l
 traducciones, hace falta reiniciar (y a veces limpiar la caché del navegador) para ver los
 cambios en el config flow.
 
+## Tests
+
+Hay una batería de tests unitarios con **pytest** en `tests/`, que usa
+`pytest-homeassistant-custom-component` (esa dependencia es la que fija de facto la
+versión de Home Assistant contra la que se prueba) y `aioresponses` para simular la API.
+
+```bash
+python3 -m venv .venv-test
+.venv-test/bin/pip install -r requirements-test.txt
+.venv-test/bin/pytest -q
+```
+
+Qué se espera de un PR:
+
+- Si **arreglas un bug**, añade un test que falle sin el arreglo.
+- Si **añades un endpoint** a `api.py`, añade un test con una respuesta de ejemplo
+  **anonimizada** (mira `tests/test_api.py`).
+- Si tocas la **importación de estadísticas** o la **detección de fugas**, hay que cubrir
+  el caso raro: huecos, índices que retroceden y el día de 25 horas de octubre
+  (ver `tests/test_coordinator.py`).
+- **Nunca** pongas datos reales en los tests: ni NIF, ni contratos, ni direcciones.
+
 ## Estilo y convenciones
 
 - Se sigue el estilo de las integraciones del núcleo de Home Assistant.
 - `from __future__ import annotations` al principio de cada módulo, y tipado en las
   firmas públicas.
-- Línea de 88 columnas. Formato y linting con **ruff**:
+- Línea de 88 columnas. Formato y linting con **ruff**, configurado en `ruff.toml` con los
+  mismos grupos de reglas que usa Home Assistant Core:
 
   ```bash
-  ruff format custom_components/emasesa
-  ruff check custom_components/emasesa
+  ruff check custom_components/
+  ruff format --check --diff custom_components/
   ```
+
+  Es exactamente lo que ejecuta la CI, así que si pasa en local, pasa en el PR.
 
 - **Todo el I/O es asíncrono.** Nada de `requests` ni de llamadas bloqueantes dentro del
   bucle de eventos; se usa el `aiohttp` compartido de Home Assistant
@@ -123,39 +149,56 @@ cambios en el config flow.
 - **No rompas los `unique_id` ni los `statistic_id` existentes** sin una migración: si
   cambian, la gente pierde su histórico.
 
-### Validación
+### Integración continua
 
-Antes de abrir el PR conviene pasar las mismas comprobaciones que la CI:
+Con cada push y cada PR se ejecutan dos flujos de trabajo:
 
-- **hassfest** (valida `manifest.json`, `strings.json` y las traducciones).
-- **HACS Action** (valida la estructura del repositorio y `hacs.json`).
+| Flujo | Qué comprueba |
+| --- | --- |
+| `.github/workflows/lint.yml` | `ruff check` y `ruff format --check` |
+| `.github/workflows/validate.yml` | **hassfest** (`manifest.json`, `strings.json` y traducciones) y **HACS Action** (estructura del repositorio y `hacs.json`) |
 
-Ambas se ejecutan en `.github/workflows/validate.yml` con cada push y cada PR.
+`validate.yml` se lanza además todos los lunes, para detectar roturas causadas por cambios
+en hassfest o en HACS aunque nadie haya tocado el repositorio.
 
 ## Estructura del proyecto
 
 ```
 custom_components/emasesa/
-├── __init__.py        # setup/unload de la entrada, arranque del coordinator
+├── __init__.py        # setup/unload de la entrada, coordinator y servicios
 ├── api.py             # cliente HTTP de la API privada (auth, 2FA, endpoints)
+├── binary_sensor.py   # fuga, avería del contador e incidencias
 ├── config_flow.py     # alta, doble factor, selección de contrato, reauth y opciones
 ├── const.py           # dominio, endpoints, claves de config y valores por defecto
-├── coordinator.py     # sondeo, cálculo del coste e importación de estadísticas
+├── coordinator.py     # sondeo, coste, detección de fugas e importación de estadísticas
+├── diagnostics.py     # volcado de diagnóstico con datos personales redactados
+├── entity.py          # device_info compartido por todas las plataformas
 ├── sensor.py          # entidades sensor
 ├── manifest.json
-├── strings.json       # textos del config flow y nombres de entidad
+├── services.yaml      # definición de los servicios del dominio
+├── strings.json       # textos del config flow, opciones y nombres de entidad
 └── translations/
     ├── es.json
     └── en.json
+
+tests/                 # pytest (api, coordinator)
+ruff.toml              # configuración del linter/formateador
+.github/workflows/     # lint.yml y validate.yml
 ```
 
 Reglas rápidas:
 
-- Todo lo que hable HTTP vive en `api.py`; ni el coordinator ni los sensores construyen
+- Todo lo que hable HTTP vive en `api.py`; ni el coordinator ni las entidades construyen
   URLs.
-- Toda la lógica de negocio vive en `coordinator.py`; los sensores solo **leen** de
+- Toda la lógica de negocio vive en `coordinator.py`; las entidades solo **leen** de
   `coordinator.data`.
+- El `DeviceInfo` se construye en `entity.py` y lo comparten todas las plataformas, para
+  que sensores y binarios cuelguen del mismo dispositivo.
 - Las constantes nuevas van a `const.py`, no dispersas por los módulos.
+- Los datos “extra” (facturas, embalses, incidencias) se piden con el envoltorio `_safe`
+  del coordinator: **si fallan, la actualización del consumo no debe caerse**.
+- Si añades un servicio, defínelo en `services.yaml` **y** añade sus textos a
+  `strings.json` y a las traducciones.
 
 ## Trabajar con la API privada
 
@@ -192,8 +235,9 @@ Los textos viven en dos sitios que hay que mantener alineados:
 - `strings.json`: la fuente de verdad.
 - `translations/es.json` y `translations/en.json`: las traducciones que ve el usuario.
 
-Si añades una clave (paso del flujo, error, opción o entidad nueva), **actualiza los tres
-ficheros** en el mismo commit. hassfest falla si falta alguna.
+Si añades una clave (paso del flujo, error, opción, servicio o entidad nueva),
+**actualiza los tres ficheros** en el mismo commit. hassfest falla si falta alguna, y en la
+interfaz aparecería el nombre técnico de la clave en vez de un texto legible.
 
 ¿Quieres aportar otro idioma? Copia `translations/en.json` a `translations/<código>.json` y
 traduce solo los valores, nunca las claves.

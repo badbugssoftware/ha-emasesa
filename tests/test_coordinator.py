@@ -26,6 +26,7 @@ from custom_components.emasesa.const import (  # noqa: E402
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
     LITERS_PER_M3,
+    MAX_BACKFILL_DAYS,
     UPDATE_BACKFILL_DAYS,
 )
 from custom_components.emasesa.coordinator import EmasesaCoordinator  # noqa: E402
@@ -371,22 +372,37 @@ async def test_days_to_backfill_sin_estadisticas_previas(coordinator):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    raises=NameError,
-    strict=True,
-    reason=(
-        "BUG real en coordinator.py: `_days_to_backfill` usa MAX_BACKFILL_DAYS "
-        "pero no está en el `from .const import (...)`. En cuanto existe una "
-        "estadística previa (o sea, en todas las actualizaciones salvo la "
-        "primera) lanza NameError y el coordinador falla."
-    ),
-)
-async def test_days_to_backfill_con_estadisticas_previas(coordinator):
+async def test_days_to_backfill_hueco_corto_usa_la_ventana_normal(coordinator):
+    """Con datos recientes no se reimportan 60 días en cada arranque de HA."""
     hace_dos_dias = dt_util.utcnow() - timedelta(days=2)
     coordinator._last_stat = AsyncMock(
         return_value={"start": hace_dos_dias.timestamp(), "sum": 443.601}
     )
     assert await coordinator._days_to_backfill() == UPDATE_BACKFILL_DAYS
+    coordinator._last_stat.assert_awaited_once_with(
+        f"{DOMAIN}:{CONTRACT_ID}_water"
+    )
+
+
+@pytest.mark.asyncio
+async def test_days_to_backfill_hueco_largo_se_topa_en_el_maximo(coordinator):
+    """Si HA o la API llevan años caídos, no se pide un histórico infinito."""
+    hace_mucho = dt_util.utcnow() - timedelta(days=900)
+    coordinator._last_stat = AsyncMock(
+        return_value={"start": hace_mucho.timestamp(), "sum": 100.0}
+    )
+    assert await coordinator._days_to_backfill() == MAX_BACKFILL_DAYS
+
+
+@pytest.mark.asyncio
+async def test_days_to_backfill_hueco_medio(coordinator):
+    hace_diez_dias = dt_util.utcnow() - timedelta(days=10)
+    coordinator._last_stat = AsyncMock(
+        return_value={"start": hace_diez_dias.timestamp(), "sum": 443.601}
+    )
+    dias = await coordinator._days_to_backfill()
+    assert dias == 11  # 10 días de hueco + 1 de margen
+    assert UPDATE_BACKFILL_DAYS < dias < MAX_BACKFILL_DAYS
 
 
 @pytest.mark.asyncio

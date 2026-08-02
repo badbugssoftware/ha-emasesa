@@ -3,7 +3,9 @@
 [![HACS: repositorio personalizado](https://img.shields.io/badge/HACS-repositorio%20personalizado-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://hacs.xyz/docs/faq/custom_repositories/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%E2%89%A5%202024.6-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-3DA639?style=for-the-badge)](LICENSE)
-[![Validación](https://img.shields.io/github/actions/workflow/status/abrahamfa/ha-emasesa/validate.yml?branch=main&style=for-the-badge&label=hassfest%20%2B%20HACS)](https://github.com/abrahamfa/ha-emasesa/actions/workflows/validate.yml)
+
+[![Validate](https://github.com/abrahamfa/ha-emasesa/actions/workflows/validate.yml/badge.svg)](https://github.com/abrahamfa/ha-emasesa/actions/workflows/validate.yml)
+[![Lint](https://github.com/abrahamfa/ha-emasesa/actions/workflows/lint.yml/badge.svg)](https://github.com/abrahamfa/ha-emasesa/actions/workflows/lint.yml)
 
 Integración **no oficial** que trae a Home Assistant tu **consumo de agua de EMASESA**
 (Empresa Metropolitana de Abastecimiento y Saneamiento de Aguas de Sevilla), leyendo la
@@ -38,9 +40,9 @@ incluido el **coste en euros** calculado con el **simulador oficial de tarifas**
 - [Configuración](#configuración)
 - [Opciones](#opciones)
 - [Panel de Energía](#panel-de-energía)
+- [Servicios](#servicios)
 - [Notas importantes](#notas-importantes)
 - [Ejemplos de automatización](#ejemplos-de-automatización)
-- [En desarrollo](#en-desarrollo)
 - [FAQ y solución de problemas](#faq-y-solución-de-problemas)
 - [Cómo funciona por dentro](#cómo-funciona-por-dentro)
 - [Contribuir](#contribuir)
@@ -51,8 +53,8 @@ incluido el **coste en euros** calculado con el **simulador oficial de tarifas**
 
 ## Qué hace
 
-- **Lee el contador por telelectura**: índice acumulado, consumo del día y desglose
-  diurno / nocturno.
+- **Lee el contador por telelectura**: índice acumulado, consumo del día, desglose
+  diurno / nocturno y consumo medio diario del ciclo.
 - **Rellena el histórico horario** en las estadísticas de largo plazo de Home Assistant
   (unos **60 días** en el primer arranque; después mantiene los últimos días y **tapa
   huecos** si HA o la API han estado caídos).
@@ -62,13 +64,19 @@ incluido el **coste en euros** calculado con el **simulador oficial de tarifas**
   integración tenga que mantener tablas de precios.
 - **Alimenta el panel de Energía** con dos estadísticas externas: **m³ consumidos** y
   **€ gastados**.
+- **Facturación**: importe de la última factura, importe pendiente de pago y días que
+  faltan para la siguiente.
+- **Avisos**: posible **fuga** por caudal nocturno continuo, **avería del contador** con
+  consumo estimado, **incidencia pendiente** en tu suministro e **incidencias de la red**
+  de EMASESA cerca de tu casa.
+- **Estado de los embalses** que abastecen a Sevilla.
 - **Configuración 100 % por interfaz**: sin YAML, con soporte de **doble factor (SMS)**,
   **reautenticación** y **selección de contrato** cuando tienes varios suministros.
 
 ```mermaid
 flowchart LR
     A["API privada<br/>Mi Emasesa"] --> B["Coordinator<br/>(cada 45 min)"]
-    B --> C["4 sensores<br/>del contrato"]
+    B --> C["9 sensores +<br/>4 binary_sensors"]
     B --> D["Estadísticas externas<br/>emasesa:…_water<br/>emasesa:…_water_cost"]
     D --> E["Panel de Energía<br/>(agua + coste)"]
 ```
@@ -84,23 +92,49 @@ con el fabricante, modelo y número de serie reales del contador:
 │                                                                  │
 │  Índice del contador ................... 1 284,317 m³            │
 │  Consumo del día ....................... 312 L                   │
+│  Consumo medio diario .................. 287 L                   │
 │  Coste del periodo ..................... 41,86 €                 │
 │  Precio del agua ....................... 2,1934 €/m³             │
+│  Última factura ........................ 68,42 €                 │
+│  Importe pendiente ..................... 0,00 €                  │
+│  Días para la próxima factura .......... 34 d                    │
+│  Embalses .............................. 61,4 %                  │
+│                                                                  │
+│  Posible fuga .......................... Correcto                │
+│  Incidencia de red cercana ............. Correcto                │
+│  ⚙ Avería del contador ................. Correcto                │
+│  ⚙ Incidencia pendiente ................ Correcto                │
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+### Sensores
 
 | Entidad | `entity_id` de ejemplo | Unidad | `device_class` | `state_class` |
 | --- | --- | --- | --- | --- |
 | **Índice del contador** | `sensor.emasesa_12345678_indice_del_contador` | `m³` | `water` | `total_increasing` |
 | **Consumo del día** | `sensor.emasesa_12345678_consumo_del_dia` | `L` | – | – (valor diario) |
+| **Consumo medio diario** | `sensor.emasesa_12345678_consumo_medio_diario` | `L` | – | `measurement` |
 | **Coste del periodo** | `sensor.emasesa_12345678_coste_del_periodo` | `EUR` | `monetary` | – |
 | **Precio del agua** | `sensor.emasesa_12345678_precio_del_agua` | `EUR/m³` | – | `measurement` |
+| **Última factura** | `sensor.emasesa_12345678_ultima_factura` | `EUR` | `monetary` | – |
+| **Importe pendiente** | `sensor.emasesa_12345678_importe_pendiente` | `EUR` | `monetary` | – |
+| **Días para la próxima factura** | `sensor.emasesa_12345678_dias_para_la_proxima_factura` | `d` | – | – |
+| **Embalses** | `sensor.emasesa_12345678_embalses` | `%` | – | `measurement` |
+
+### Sensores binarios
+
+| Entidad | `entity_id` de ejemplo | `device_class` | Categoría | Se activa cuando… |
+| --- | --- | --- | --- | --- |
+| **Posible fuga** | `binary_sensor.emasesa_12345678_posible_fuga` | `problem` | – | Durante **3 noches seguidas** ninguna hora entre las **02:00 y las 05:00** baja de 1 L |
+| **Incidencia de red cercana** | `binary_sensor.emasesa_12345678_incidencia_de_red_cercana` | `problem` | – | Hay una actuación o avería de la red de EMASESA dentro del radio configurado |
+| **Avería del contador** | `binary_sensor.emasesa_12345678_averia_del_contador` | `problem` | Diagnóstico | EMASESA marca el contador en avería y **estima** el consumo |
+| **Incidencia pendiente** | `binary_sensor.emasesa_12345678_incidencia_pendiente` | `problem` | Diagnóstico | Hay una orden de trabajo o incidencia abierta en tu suministro |
 
 > El `entity_id` real se construye con el **número de contrato** que aparece en tu
 > factura. Compruébalo en *Ajustes → Dispositivos y servicios → EMASESA*.
 
 <details>
-<summary><b>Atributos de cada sensor</b></summary>
+<summary><b>Atributos de cada entidad</b></summary>
 
 **Índice del contador**
 
@@ -119,7 +153,14 @@ con el fabricante, modelo y número de serie reales del contador:
 | --- | --- |
 | `fecha` | Día al que corresponde el consumo |
 | `consumo_diurno_litros` | Litros consumidos en franja diurna |
-| `consumo_nocturno_litros` | Litros consumidos en franja nocturna (**muy útil para detectar fugas**) |
+| `consumo_nocturno_litros` | Litros consumidos en franja nocturna |
+
+**Consumo medio diario**
+
+| Atributo | Descripción |
+| --- | --- |
+| `valoracion`, `valoracion_texto` | Valoración del consumo que hace la propia EMASESA |
+| `ultima_telelectura` | Fecha de la última telelectura recibida |
 
 **Coste del periodo**
 
@@ -129,6 +170,39 @@ con el fabricante, modelo y número de serie reales del contador:
 | `precio_efectivo_eur_m3` | € por m³ resultante (coste ÷ consumo) |
 | `periodo_desde` | Fecha de fin de la última factura, es decir, inicio del ciclo actual |
 | `proxima_factura` | Fecha prevista de la próxima facturación |
+
+**Última factura**
+
+| Atributo | Descripción |
+| --- | --- |
+| `numero` | Número de factura |
+| `fecha_emision` | Fecha de emisión |
+| `estado_cobro` | Estado del cobro |
+| `consumo_m3`, `dias_facturados` | Consumo y días facturados |
+| `periodo_desde`, `periodo_hasta` | Periodo facturado |
+
+**Días para la próxima factura**: `periodo_desde` y `proxima_factura`.
+
+**Embalses**: `fecha`, `volumen_hm3`, `capacidad_hm3` y un atributo por embalse con su
+porcentaje de llenado.
+
+**Posible fuga**
+
+| Atributo | Descripción |
+| --- | --- |
+| `noches_analizadas` | Noches completas usadas en el análisis |
+| `consumo_minimo_nocturno_l` | Litros de la hora de madrugada con menos consumo |
+| `desde` | Primera noche de la racha detectada |
+
+**Incidencia de red cercana**
+
+| Atributo | Descripción |
+| --- | --- |
+| `numero` | Incidencias dentro del radio |
+| `radio_m` | Radio configurado, en metros |
+| `total_ciudad` | Incidencias activas en toda la ciudad |
+| `mas_cercana`, `distancia_m`, `direccion` | Datos de la más próxima |
+| `incidencias` | Hasta 10 incidencias con categoría, dirección, inicio, tipo y distancia |
 
 </details>
 
@@ -169,6 +243,7 @@ dentro del ciclo.
 | **Cuenta de la Oficina Virtual / app Mi Emasesa** | Con acceso al contrato que quieras monitorizar. |
 | **Home Assistant ≥ 2024.6** | Requerido por el config flow y la API de estadísticas que se usa. |
 | **Integración `recorder` activa** | Es una dependencia declarada: sin ella no hay estadísticas de largo plazo ni panel de Energía. Viene activada de serie salvo que la hayas desactivado a mano. |
+| **Ubicación de tu casa configurada** | Solo para el sensor de *incidencia de red cercana*, que compara las coordenadas de las actuaciones de EMASESA con las de tu instalación. |
 
 ## Instalación
 
@@ -232,9 +307,10 @@ En la tarjeta de la integración, **Configurar**:
 | Opción | Clave | Por defecto | Rango |
 | --- | --- | --- | --- |
 | Intervalo de actualización (minutos) | `scan_minutes` | `45` | `15` – `1440` |
+| Radio de incidencias cercanas (metros) | `incident_radius_m` | `1000` | `100` – `20000` |
 
 > [!TIP]
-> No merece la pena bajarlo. El dato de telelectura se consolida como mucho cada hora y,
+> No bajes el intervalo. El dato de telelectura se consolida como mucho cada hora y,
 > encima, llega con **1–2 días de retraso**: sondear cada pocos minutos no te dará datos
 > más frescos, solo carga innecesaria sobre la API de EMASESA.
 
@@ -279,12 +355,60 @@ multiplicar por un precio fijo.
 > hiciera falta, borra las estadísticas sobrantes desde
 > *Herramientas para desarrolladores → Estadísticas*.
 
+## Servicios
+
+### `emasesa.simular_factura`
+
+Pregunta al **simulador oficial de EMASESA** cuánto costaría un consumo determinado en un
+periodo. Devuelve respuesta, así que se usa con `response_variable`.
+
+| Campo | Obligatorio | Descripción |
+| --- | --- | --- |
+| `config_entry_id` | Sí | Contrato de EMASESA sobre el que simular |
+| `consumo` | Sí | Metros cúbicos a simular (`0` – `1000`) |
+| `fecha_desde` | No | Inicio del periodo. Por defecto, el del ciclo en curso |
+| `fecha_hasta` | No | Fin del periodo. Por defecto, hoy |
+
+Devuelve `importe`, `consumo`, `dias` y la lista de `conceptos` con su desglose
+(`concepto`, `unidades`, `precio_unitario`, `total_con_iva`).
+
+```yaml
+action:
+  - service: emasesa.simular_factura
+    data:
+      config_entry_id: "{{ config_entry_id('sensor.emasesa_12345678_coste_del_periodo') }}"
+      consumo: 25
+    response_variable: simulacion
+  - service: notify.persistent_notification
+    data:
+      title: "Simulación EMASESA"
+      message: "25 m³ costarían {{ simulacion.importe }} € ({{ simulacion.dias }} días)."
+```
+
+### `emasesa.recargar_historico`
+
+Vuelve a importar el consumo horario de los últimos N días a las estadísticas. Útil si
+detectas huecos en el panel de Energía.
+
+| Campo | Obligatorio | Descripción |
+| --- | --- | --- |
+| `config_entry_id` | Sí | Contrato de EMASESA a recargar |
+| `dias` | No | Días hacia atrás a recargar (`1` – `365`, por defecto `60`) |
+
+### Diagnósticos
+
+En la tarjeta del dispositivo, **Descargar diagnóstico** genera un JSON con el estado de
+la integración. El NIF, la contraseña, el identificador de dispositivo y la dirección de
+suministro se **redactan automáticamente**, pero **revísalo igualmente** antes de pegarlo
+en una incidencia.
+
 ## Notas importantes
 
 - ⏳ **Los datos llegan con 1–2 días de retraso.** Así funciona la telelectura de EMASESA:
   el contador NB-IoT envía sus lecturas por lotes y el backend las consolida después. No
   esperes ver en Home Assistant la ducha que te acabas de dar. El sensor
   *Consumo del día* muestra el **último día disponible**, que no tiene por qué ser hoy.
+  Lo mismo vale para el sensor de *posible fuga*: avisa con ese mismo retraso.
 - 💶 **El coste es una estimación**, no una factura. Lo calcula el **simulador oficial de
   EMASESA** con el consumo real de tu ciclo, así que aplica tu tarifa de verdad, pero
   puede diferir de la factura final por redondeos, regularizaciones, prorrateos,
@@ -294,6 +418,9 @@ multiplicar por un precio fijo.
   proceso tarda un poco y las estadísticas pueden no verse hasta pasados unos minutos.
 - 🧭 Las horas se interpretan en **Europe/Madrid**, incluidos los cambios de hora
   (el día de 25 horas de octubre está contemplado).
+- 🧩 Los datos “extra” (facturas, embalses e incidencias) son **opcionales**: si esas
+  llamadas fallan, la integración sigue funcionando y solo se quedan sin valor esos
+  sensores.
 - 🔐 Tus credenciales se guardan en el almacén de configuración de Home Assistant, como en
   cualquier otra integración, y solo se envían a EMASESA.
 
@@ -321,21 +448,47 @@ automation:
             El {{ state_attr('sensor.emasesa_12345678_consumo_del_dia', 'fecha') }}
             se consumieron
             {{ states('sensor.emasesa_12345678_consumo_del_dia') }} L
-            ({{ state_attr('sensor.emasesa_12345678_consumo_del_dia',
-                           'consumo_nocturno_litros') }} L de noche).
+            (media del ciclo:
+            {{ states('sensor.emasesa_12345678_consumo_medio_diario') }} L/día).
 ```
 
-### Aviso de posible fuga por caudal nocturno
+### Aviso de posible fuga
 
-Un consumo nocturno constante y apreciable, con la casa dormida, es el síntoma clásico de
-una cisterna que pierde o de un goteo. Ajusta el umbral a tu vivienda: una cisterna con
-fuga se va fácilmente por encima de 50 L por noche.
+El sensor binario ya hace el trabajo: se enciende cuando durante **tres noches seguidas**
+no hay ni una sola hora de madrugada con el consumo a cero, que es el síntoma clásico de
+una cisterna que pierde o de un goteo.
 
 ```yaml
 automation:
-  - alias: "Agua · Posible fuga (caudal nocturno)"
-    description: >-
-      Salta cuando llega un día nuevo de telelectura con consumo nocturno elevado.
+  - alias: "Agua · Posible fuga"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.emasesa_12345678_posible_fuga
+        to: "on"
+        for: "00:10:00"
+    action:
+      - service: notify.persistent_notification
+        data:
+          title: "⚠️ Posible fuga de agua"
+          message: >-
+            Llevas
+            {{ state_attr('binary_sensor.emasesa_12345678_posible_fuga',
+                          'noches_analizadas') }}
+            noches con consumo continuo de madrugada (mínimo
+            {{ state_attr('binary_sensor.emasesa_12345678_posible_fuga',
+                          'consumo_minimo_nocturno_l') }} L/h,
+            desde el
+            {{ state_attr('binary_sensor.emasesa_12345678_posible_fuga', 'desde') }}).
+            Revisa cisternas, grifos y riego.
+```
+
+<details>
+<summary>Variante sin el sensor binario, con tu propio umbral nocturno</summary>
+
+```yaml
+automation:
+  - alias: "Agua · Caudal nocturno por encima de lo normal"
     mode: single
     trigger:
       - platform: state
@@ -349,15 +502,16 @@ automation:
     action:
       - service: notify.persistent_notification
         data:
-          title: "⚠️ Posible fuga de agua"
+          title: "Caudal nocturno alto"
           message: >-
             La noche del
             {{ state_attr('sensor.emasesa_12345678_consumo_del_dia', 'fecha') }}
             se registraron
             {{ state_attr('sensor.emasesa_12345678_consumo_del_dia',
                           'consumo_nocturno_litros') }} L con la casa en reposo.
-            Revisa cisternas, grifos y riego.
 ```
+
+</details>
 
 ### Aviso cuando el gasto del ciclo pasa de un umbral
 
@@ -377,23 +531,35 @@ automation:
             Llevas {{ states('sensor.emasesa_12345678_coste_del_periodo') }} € este ciclo
             ({{ state_attr('sensor.emasesa_12345678_coste_del_periodo',
                            'consumo_periodo_m3') }} m³).
-            Próxima factura:
-            {{ state_attr('sensor.emasesa_12345678_coste_del_periodo',
-                          'proxima_factura') }}.
+            Quedan {{ states('sensor.emasesa_12345678_dias_para_la_proxima_factura') }}
+            días para la próxima factura.
 ```
 
-## En desarrollo
+### Cortar el riego si hay una avería de red cerca
 
-Estas funciones están **en construcción** y todavía no forman parte de una versión
-publicada:
-
-- Sensores de **última factura**, **deuda pendiente**, **consumo medio diario**,
-  **días hasta la próxima factura** y **estado de los embalses** que abastecen a Sevilla.
-- `binary_sensor` de **posible fuga por caudal nocturno**, **avería o lectura estimada
-  forzada** e **incidencia de red cercana**.
-- **Servicios** (`services.yaml`) y **diagnósticos** descargables (`diagnostics.py`).
-
-Si te interesa alguna, comenta en el issue correspondiente antes de ponerte a ello.
+```yaml
+automation:
+  - alias: "Agua · Incidencia de red cercana"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.emasesa_12345678_incidencia_de_red_cercana
+        to: "on"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.riego_jardin
+      - service: notify.persistent_notification
+        data:
+          title: "Incidencia de EMASESA cerca"
+          message: >-
+            {{ state_attr('binary_sensor.emasesa_12345678_incidencia_de_red_cercana',
+                          'mas_cercana') }}
+            a {{ state_attr('binary_sensor.emasesa_12345678_incidencia_de_red_cercana',
+                            'distancia_m') }} m
+            ({{ state_attr('binary_sensor.emasesa_12345678_incidencia_de_red_cercana',
+                           'direccion') }}). Riego apagado por si hay corte.
+```
 
 ## FAQ y solución de problemas
 
@@ -445,6 +611,9 @@ no publica detalle horario para ese contrato y solo tendrás lo que dé la lectu
 También puede ser simplemente el **retraso de 1–2 días** de la telelectura, sobre todo si
 acabas de instalar la integración o si el contador lleva poco tiempo telegestionado.
 
+Y si el binario *Avería del contador* está encendido, EMASESA está **estimando** tu
+consumo: los datos no son lecturas reales.
+
 </details>
 
 <details>
@@ -457,12 +626,29 @@ estadística `emasesa:<contrato>_water`. Quita uno de los dos; ver
 </details>
 
 <details>
+<summary><b>Tengo huecos en el histórico del panel de Energía</b></summary>
+
+Llama al servicio [`emasesa.recargar_historico`](#emasesarecargar_historico) con los días
+que quieras reimportar. La importación es idempotente: no duplica consumo.
+
+</details>
+
+<details>
 <summary><b>El coste no cuadra con mi factura</b></summary>
 
 Es una **estimación del simulador oficial** para el consumo acumulado del ciclo en curso.
 Diferencias habituales: el simulador redondea a m³ enteros y la factura real puede incluir
 regularizaciones, prorrateos por cambio de tarifa, bonificaciones o conceptos ajenos al
 consumo. Sirve para saber por dónde vas, no para cuadrar céntimos.
+
+</details>
+
+<details>
+<summary><b>El sensor de incidencias cercanas nunca se enciende</b></summary>
+
+Comprueba que tienes la **ubicación de tu casa** configurada en *Ajustes → Sistema →
+General*: sin coordenadas no hay forma de calcular la distancia. Y sube el
+**radio de incidencias** en las opciones si vives en una zona con pocas actuaciones.
 
 </details>
 
@@ -487,8 +673,8 @@ Antes de abrir una incidencia:
 
 4. Abre una incidencia en
    [GitHub](https://github.com/abrahamfa/ha-emasesa/issues) con la versión de Home
-   Assistant, la versión de la integración y el log, **quitando antes tu NIF, tu
-   contraseña, los tokens y el número de contrato**.
+   Assistant, la versión de la integración y el log o el diagnóstico, **quitando antes tu
+   NIF, tu contraseña, los tokens y el número de contrato**.
 
 </details>
 
@@ -496,7 +682,7 @@ Antes de abrir una incidencia:
 <summary><b>¿Puedo monitorizar varios contratos?</b></summary>
 
 Sí: añade la integración una vez por contrato. Cada uno crea su propio dispositivo, sus
-sensores y su par de estadísticas.
+entidades y su par de estadísticas.
 
 </details>
 
@@ -520,7 +706,8 @@ entradas. En el siguiente sondeo, la integración volverá a importar el histór
 3. **Dispositivo de confianza**: `POST /dispositivos` con `confianza: "S"`, para que los
    siguientes logins no disparen otro SMS.
 4. **Datos**: consumo horario por rango de fechas, último día disponible, información del
-   contador, valoración del consumo del ciclo y simulación de factura.
+   contador, valoración del consumo del ciclo, simulación de factura, facturas, embalses y
+   actuaciones en la red.
 5. **Estadísticas**: el índice acumulado del contador (en litros) se convierte a m³ y se
    escribe como suma monotónica en `emasesa:<contrato>_water`; el coste se acumula por
    incrementos en `emasesa:<contrato>_water_cost`.
@@ -535,8 +722,8 @@ Dos detalles que cuestan horas si no se saben, y que ya están resueltos en el c
 ## Contribuir
 
 Las incidencias y los *pull requests* son bienvenidos. Lee
-[CONTRIBUTING.md](CONTRIBUTING.md) antes de empezar: explica cómo montar el entorno, el
-estilo del proyecto y, muy importante, **cómo compartir logs sin filtrar tus datos
+[CONTRIBUTING.md](CONTRIBUTING.md) antes de empezar: explica cómo montar el entorno, cómo
+pasar los tests y el linter y, muy importante, **cómo compartir logs sin filtrar tus datos
 personales**.
 
 ## Créditos
