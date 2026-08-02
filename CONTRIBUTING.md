@@ -43,7 +43,7 @@ también. Si no estás seguro de si algo es sensible, no lo pegues: pregunta pri
 ## Informar de un error
 
 Abre una incidencia en
-[GitHub Issues](https://github.com/abrahamfa/ha-emasesa/issues) e incluye:
+[GitHub Issues](https://github.com/badbugssoftware/ha-emasesa/issues) e incluye:
 
 1. **Versión de Home Assistant** y **versión de la integración** (la de `manifest.json`).
 2. **Cómo lo has instalado**: HACS o manual.
@@ -81,7 +81,7 @@ La integración no tiene dependencias propias (`requirements` está vacío en el
 `manifest.json`): todo lo que usa viene con Home Assistant.
 
 ```bash
-git clone https://github.com/abrahamfa/ha-emasesa.git
+git clone https://github.com/badbugssoftware/ha-emasesa.git
 cd ha-emasesa
 
 python3 -m venv .venv

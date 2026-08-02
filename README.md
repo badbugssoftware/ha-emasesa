@@ -4,8 +4,8 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%E2%89%A5%202024.6-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-3DA639?style=for-the-badge)](LICENSE)
 
-[![Validate](https://github.com/abrahamfa/ha-emasesa/actions/workflows/validate.yml/badge.svg)](https://github.com/abrahamfa/ha-emasesa/actions/workflows/validate.yml)
-[![Lint](https://github.com/abrahamfa/ha-emasesa/actions/workflows/lint.yml/badge.svg)](https://github.com/abrahamfa/ha-emasesa/actions/workflows/lint.yml)
+[![Validate](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/validate.yml/badge.svg)](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/validate.yml)
+[![Lint](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/lint.yml/badge.svg)](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/lint.yml)
 
 Integración **no oficial** que trae a Home Assistant tu **consumo de agua de EMASESA**
 (Empresa Metropolitana de Abastecimiento y Saneamiento de Aguas de Sevilla), leyendo la
@@ -254,12 +254,12 @@ Este repositorio todavía no está en el índice por defecto de HACS, así que s
 
 1. Abre **HACS** en Home Assistant.
 2. Menú **⋮** (arriba a la derecha) → **Repositorios personalizados**.
-3. Pega la URL `https://github.com/abrahamfa/ha-emasesa` y elige la categoría
+3. Pega la URL `https://github.com/badbugssoftware/ha-emasesa` y elige la categoría
    **Integration**. Pulsa **Añadir**.
 4. Busca **EMASESA (Aguas de Sevilla)** en HACS y pulsa **Descargar**.
 5. **Reinicia** Home Assistant.
 
-[![Añadir repositorio a HACS](https://img.shields.io/badge/HACS-a%C3%B1adir%20repositorio-41BDF5?style=flat-square&logo=home-assistant&logoColor=white)](https://my.home-assistant.io/redirect/hacs_repository/?owner=abrahamfa&repository=ha-emasesa&category=integration)
+[![Añadir repositorio a HACS](https://img.shields.io/badge/HACS-a%C3%B1adir%20repositorio-41BDF5?style=flat-square&logo=home-assistant&logoColor=white)](https://my.home-assistant.io/redirect/hacs_repository/?owner=badbugssoftware&repository=ha-emasesa&category=integration)
 
 ### Opción B — Instalación manual
 
@@ -672,7 +672,7 @@ Antes de abrir una incidencia:
    ```
 
 4. Abre una incidencia en
-   [GitHub](https://github.com/abrahamfa/ha-emasesa/issues) con la versión de Home
+   [GitHub](https://github.com/badbugssoftware/ha-emasesa/issues) con la versión de Home
    Assistant, la versión de la integración y el log o el diagnóstico, **quitando antes tu
    NIF, tu contraseña, los tokens y el número de contrato**.
 
@@ -741,7 +741,7 @@ Y, cómo no, de la comunidad de Home Assistant y de HACS.
 
 ## Licencia
 
-[MIT](LICENSE) © 2026 abrahamfa.
+[MIT](LICENSE) © 2026 badbugssoftware.
 
 *EMASESA y Mi Emasesa son marcas de la Empresa Metropolitana de Abastecimiento y
 Saneamiento de Aguas de Sevilla, S.A. Este proyecto no está afiliado, patrocinado ni

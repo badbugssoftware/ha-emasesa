@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Preguntas y ayuda
-    url: https://github.com/abrahamfa/ha-emasesa/discussions
+    url: https://github.com/badbugssoftware/ha-emasesa/discussions
     about: >
       Para dudas de uso, configuración o "¿esto se puede hacer?", abre una
       discusión en lugar de una incidencia.

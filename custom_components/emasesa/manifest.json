@@ -2,16 +2,16 @@
   "domain": "emasesa",
   "name": "EMASESA (Aguas de Sevilla)",
   "codeowners": [
-    "@abrahamfa"
+    "@badbugssoftware"
   ],
   "config_flow": true,
   "dependencies": [
     "recorder"
   ],
-  "documentation": "https://github.com/abrahamfa/ha-emasesa",
+  "documentation": "https://github.com/badbugssoftware/ha-emasesa",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/abrahamfa/ha-emasesa/issues",
+  "issue_tracker": "https://github.com/badbugssoftware/ha-emasesa/issues",
   "requirements": [],
   "version": "0.2.0"
 }
