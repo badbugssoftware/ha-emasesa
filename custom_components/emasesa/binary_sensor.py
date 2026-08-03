@@ -2,21 +2,122 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
+    BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ATTRIBUTION, DOMAIN
+from .const import DOMAIN
 from .coordinator import EmasesaCoordinator
-from .entity import build_device_info
+from .entity import EmasesaEntity
+
+type Datos = dict[str, Any]
+
+
+@dataclass(frozen=True, kw_only=True)
+class EmasesaBinarySensorEntityDescription(BinarySensorEntityDescription):
+    """Descripción de un sensor binario.
+
+    `is_on_fn` puede devolver None: es la forma de decir "no lo sé todavía",
+    que no es lo mismo que "no". `key` es el sufijo del `unique_id` y no debe
+    cambiar una vez publicada la entidad.
+    """
+
+    is_on_fn: Callable[[Datos], bool | None]
+    attrs_fn: Callable[[Datos], dict[str, Any]] | None = None
+
+
+def _fuga(d: Datos) -> dict[str, Any]:
+    return d.get("fuga", {}) or {}
+
+
+def _incidencias(d: Datos) -> dict[str, Any]:
+    return d.get("incidencias", {}) or {}
+
+
+def _hay_fuga(d: Datos) -> bool | None:
+    """Posible fuga: consumo continuo durante la madrugada.
+
+    Si en la franja nocturna no hay NINGUNA hora con consumo cero durante
+    varias noches seguidas, lo más probable es que haya un goteo permanente.
+
+    Devuelve None mientras no haya noches completas que analizar: decir "sin
+    fuga" sin haber mirado ninguna noche es afirmar algo que no se sabe. Sin
+    telelectura horaria, o con menos de tres noches de histórico, el sensor
+    se queda en "desconocido".
+    """
+    fuga = _fuga(d)
+    if not fuga.get("analizado"):
+        return None
+    return bool(fuga.get("detectada"))
+
+
+def _atributos_incidencias(d: Datos) -> dict[str, Any]:
+    inc = _incidencias(d)
+    cercanas = inc.get("cercanas") or []
+    mas_cercana = cercanas[0] if cercanas else {}
+    return {
+        "numero": len(cercanas),
+        "radio_m": inc.get("radio_m"),
+        "total_ciudad": inc.get("total_ciudad"),
+        "mas_cercana": mas_cercana.get("categoria"),
+        "distancia_m": mas_cercana.get("distancia_m"),
+        "direccion": mas_cercana.get("direccion"),
+        "incidencias": cercanas[:10],
+    }
+
+
+SENSORES: tuple[EmasesaBinarySensorEntityDescription, ...] = (
+    EmasesaBinarySensorEntityDescription(
+        key="posible_fuga",
+        translation_key="posible_fuga",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:water-alert",
+        is_on_fn=_hay_fuga,
+        attrs_fn=lambda d: {
+            "analizado": bool(_fuga(d).get("analizado")),
+            "noches_analizadas": _fuga(d).get("noches"),
+            "consumo_minimo_nocturno_l": _fuga(d).get("min_l_h"),
+            "desde": _fuga(d).get("desde"),
+        },
+    ),
+    # El contador está en avería y EMASESA factura con consumo estimado.
+    EmasesaBinarySensorEntityDescription(
+        key="averia_contador",
+        translation_key="averia_contador",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        is_on_fn=lambda d: bool(d.get("averia_estimacion")),
+    ),
+    # Hay una orden de trabajo o incidencia pendiente en tu suministro.
+    EmasesaBinarySensorEntityDescription(
+        key="incidencia_pendiente",
+        translation_key="incidencia_pendiente",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        is_on_fn=lambda d: bool(d.get("incidencia_pendiente")),
+    ),
+    # Incidencia de la red de EMASESA cerca de la vivienda. Es el único dato
+    # en tiempo real de la API: sirve para avisar de cortes o salideros y, por
+    # ejemplo, cancelar el riego.
+    EmasesaBinarySensorEntityDescription(
+        key="incidencia_cercana",
+        translation_key="incidencia_cercana",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:pipe-leak",
+        is_on_fn=lambda d: bool(_incidencias(d).get("cercanas")),
+        attrs_fn=_atributos_incidencias,
+    ),
+)
 
 
 async def async_setup_entry(
@@ -27,130 +128,30 @@ async def async_setup_entry(
     """Da de alta los sensores binarios del contrato."""
     coordinator: EmasesaCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        [
-            EmasesaLeakSensor(coordinator, entry),
-            EmasesaMeterFaultSensor(coordinator, entry),
-            EmasesaPendingIssueSensor(coordinator, entry),
-            EmasesaNetworkIncidentSensor(coordinator, entry),
-        ]
+        EmasesaBinarySensor(coordinator, entry, descripcion) for descripcion in SENSORES
     )
 
 
-class EmasesaBaseBinarySensor(
-    CoordinatorEntity[EmasesaCoordinator], BinarySensorEntity
-):
-    """Comparte el dispositivo con los sensores normales."""
+class EmasesaBinarySensor(EmasesaEntity, BinarySensorEntity):
+    """Sensor binario cuyo comportamiento sale entero de su descripción."""
 
-    _attr_has_entity_name = True
-    _attr_attribution = ATTRIBUTION
+    entity_description: EmasesaBinarySensorEntityDescription
 
-    def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator)
-        self._attr_device_info = build_device_info(coordinator, entry)
-
-
-class EmasesaLeakSensor(EmasesaBaseBinarySensor):
-    """Posible fuga: consumo continuo durante la madrugada.
-
-    Si en la franja nocturna no hay NINGUNA hora con consumo cero durante
-    varias noches seguidas, lo más probable es que haya un goteo permanente.
-    """
-
-    _attr_translation_key = "posible_fuga"
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
-    _attr_icon = "mdi:water-alert"
-
-    def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{coordinator.contract_id}_posible_fuga"
+    def __init__(
+        self,
+        coordinator: EmasesaCoordinator,
+        entry: ConfigEntry,
+        description: EmasesaBinarySensorEntityDescription,
+    ) -> None:
+        super().__init__(coordinator, entry, description.key)
+        self.entity_description = description
 
     @property
     def is_on(self) -> bool | None:
-        """None mientras no haya noches completas que analizar.
+        return self.entity_description.is_on_fn(self.datos)
 
-        Decir "sin fuga" sin haber mirado ninguna noche es afirmar algo que no
-        se sabe: sin telelectura horaria, o con menos de tres noches de
-        histórico, el sensor queda en "desconocido".
-        """
-        fuga = (self.coordinator.data or {}).get("fuga", {})
-        if not fuga.get("analizado"):
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if (attrs_fn := self.entity_description.attrs_fn) is None:
             return None
-        return bool(fuga.get("detectada"))
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        f = (self.coordinator.data or {}).get("fuga", {})
-        return {
-            "analizado": bool(f.get("analizado")),
-            "noches_analizadas": f.get("noches"),
-            "consumo_minimo_nocturno_l": f.get("min_l_h"),
-            "desde": f.get("desde"),
-        }
-
-
-class EmasesaMeterFaultSensor(EmasesaBaseBinarySensor):
-    """El contador está en avería y EMASESA estima el consumo."""
-
-    _attr_translation_key = "averia_contador"
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{coordinator.contract_id}_averia_contador"
-
-    @property
-    def is_on(self) -> bool:
-        return bool((self.coordinator.data or {}).get("averia_estimacion"))
-
-
-class EmasesaPendingIssueSensor(EmasesaBaseBinarySensor):
-    """Hay una orden de trabajo o incidencia pendiente en tu suministro."""
-
-    _attr_translation_key = "incidencia_pendiente"
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{coordinator.contract_id}_incidencia_pendiente"
-
-    @property
-    def is_on(self) -> bool:
-        return bool((self.coordinator.data or {}).get("incidencia_pendiente"))
-
-
-class EmasesaNetworkIncidentSensor(EmasesaBaseBinarySensor):
-    """Incidencia de la red de EMASESA cerca de la vivienda.
-
-    Único dato en tiempo real de la API: sirve para avisar de cortes o
-    salideros y, por ejemplo, cancelar el riego.
-    """
-
-    _attr_translation_key = "incidencia_cercana"
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
-    _attr_icon = "mdi:pipe-leak"
-
-    def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{coordinator.contract_id}_incidencia_cercana"
-
-    @property
-    def is_on(self) -> bool:
-        inc = (self.coordinator.data or {}).get("incidencias", {})
-        return bool(inc.get("cercanas"))
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        inc = (self.coordinator.data or {}).get("incidencias", {})
-        cercanas = inc.get("cercanas") or []
-        mas_cercana = cercanas[0] if cercanas else {}
-        return {
-            "numero": len(cercanas),
-            "radio_m": inc.get("radio_m"),
-            "total_ciudad": inc.get("total_ciudad"),
-            "mas_cercana": mas_cercana.get("categoria"),
-            "distancia_m": mas_cercana.get("distancia_m"),
-            "direccion": mas_cercana.get("direccion"),
-            "incidencias": cercanas[:10],
-        }
+        return attrs_fn(self.datos)

@@ -180,6 +180,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return {
             "contract_id": self.contract_id,
+            # Lo publica el sensor del índice: es el id que hay que elegir en
+            # el panel de Energía para usar el histórico horario.
+            "statistic_id": self.statistic_id,
             "coste_periodo_eur": coste_periodo,
             "precio_m3_eur": precio_m3,
             "consumo_periodo_m3": consumo_periodo_m3,
