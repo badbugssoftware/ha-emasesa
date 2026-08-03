@@ -70,6 +70,7 @@ def coordinator() -> EmasesaCoordinator:
     coord.cost_statistic_id = f"{DOMAIN}:{CONTRACT_ID}_water_cost"
     coord._tz = None
     coord._warned_no_hourly = False
+    coord._last_import_empty = False
     coord._last_stat = AsyncMock(return_value=None)
     return coord
 
@@ -498,3 +499,44 @@ async def test_embalses_expone_uno_por_embalse(coordinator):
     assert aracena["capacidad_hm3"] == 128.65
     # y el conjunto sigue siendo la media ponderada real
     assert datos["porc_llenado"] == pytest.approx(80.4, abs=0.1)
+
+
+@pytest.mark.asyncio
+async def test_backfill_converge_si_el_import_no_produjo_puntos(coordinator):
+    """Sin telelectura no hay estadísticas nunca: no se piden 60 días por ciclo.
+
+    Regresión: get_last_statistics siempre devolvía vacío para un contador sin
+    NB-IoT, así que se re-descargaba el histórico completo en cada ciclo contra
+    la API privada, indefinidamente.
+    """
+    coordinator._last_stat = AsyncMock(return_value=None)
+
+    # Primer ciclo: aún no se sabe nada, se intenta el histórico completo.
+    assert await coordinator._days_to_backfill() == INITIAL_BACKFILL_DAYS
+
+    # Un import que no genera ni un punto marca la bandera...
+    await coordinator._import_statistics([{"fecha": "2026-07-31", "detalle": []}])
+    assert coordinator._last_import_empty is True
+
+    # ...y a partir de ahí la ventana se acorta.
+    assert await coordinator._days_to_backfill() == UPDATE_BACKFILL_DAYS
+
+
+@pytest.mark.asyncio
+async def test_dia_sin_detalle_horario_genera_punto_diario(coordinator, stats_calls):
+    """Con lectura diaria pero sin desglose horario, Energía tiene algo."""
+    dias = [
+        {"fecha": "2026-07-30", "indice": 443559},
+        {"fecha": "2026-07-31", "indice": 443601},
+    ]
+    await coordinator._import_statistics(dias)
+
+    _, stats = stats_calls[0]
+    assert len(stats) == 2, "un punto por día"
+    # 23:00 local menos la hora de desplazamiento -> 22:00 local = 20:00 UTC
+    assert stats[0]["start"] == datetime(2026, 7, 30, 20, 0, tzinfo=UTC)
+    assert stats[1]["start"] == datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
+    assert stats[-1]["sum"] == pytest.approx(443.601)
+    assert _es_monotona([s["sum"] for s in stats])
+    # y al haber producido puntos, el backfill no se degrada
+    assert coordinator._last_import_empty is False

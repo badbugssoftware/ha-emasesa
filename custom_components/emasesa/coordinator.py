@@ -77,6 +77,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.incident_radius_m = incident_radius_m
         self._tz = None
         self._warned_no_hourly = False
+        # Si un import no produce puntos, la próxima ventana se acorta en vez
+        # de reintentar el histórico completo (ver _days_to_backfill).
+        self._last_import_empty = False
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -398,9 +401,16 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Evita reimportar 60 días en cada reinicio de HA (antes se usaba una
         bandera en memoria) y, a la vez, rellena huecos largos si la API o HA
         han estado caídos más que la ventana normal de actualización.
+
+        Si no hay estadísticas Y el intento anterior no produjo ni un punto,
+        se deja de insistir con los 60 días: un contador sin telelectura nunca
+        va a escribirlas, y sin esto se re-descargaría el histórico completo en
+        cada ciclo contra una API privada, para siempre.
         """
         last = await self._last_stat(self.statistic_id)
         if not last:
+            if self._last_import_empty:
+                return UPDATE_BACKFILL_DAYS
             return INITIAL_BACKFILL_DAYS
         last_dt = dt_util.utc_from_timestamp(last["start"])
         gap = (dt_util.utcnow() - last_dt).days + 1
@@ -438,6 +448,19 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             detalle = day.get("detalle") or []
             if not fecha or not isinstance(detalle, list):
                 continue
+            if not detalle:
+                # Sin desglose horario pero con lectura diaria: se emite un
+                # único punto al cierre del día (23:00 local menos la hora de
+                # desplazamiento, igual que los horarios) para que el panel de
+                # Energía tenga al menos una serie diaria.
+                indice_dia = day.get("indice")
+                if isinstance(indice_dia, (int, float)):
+                    naive = parse_hour_dt(fecha, "23")
+                    start = naive.replace(tzinfo=self._tz).astimezone(
+                        dt_util.UTC
+                    ) - timedelta(hours=1)
+                    points.append((start, float(indice_dia)))
+                continue
             seen_hours: set[str] = set()
             for item in detalle:
                 indice = item.get("indice")
@@ -464,6 +487,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 points.append((start, float(indice)))
 
         if not points:
+            # Nada que importar: la próxima ventana se acorta para no volver a
+            # pedir el histórico completo en cada ciclo.
+            self._last_import_empty = True
             # Sin telelectura horaria no hay nada que importar. Se avisa una
             # sola vez: si no, el usuario no entiende por qué el panel de
             # Energía está vacío y no hay ni una línea en el registro.
@@ -478,6 +504,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
             return
 
+        self._last_import_empty = False
         points.sort(key=lambda p: p[0])
 
         # 'sum' monotónica (clamp) para que el panel de Energía calcule consumos
