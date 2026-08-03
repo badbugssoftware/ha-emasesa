@@ -17,6 +17,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import LocationSelector
 
 from .api import (
     EmasesaAuthError,
@@ -29,6 +30,8 @@ from .const import (
     CONF_CONTRACT_NUMBER,
     CONF_DEVICE_ID,
     CONF_INCIDENT_RADIUS,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
     CONF_PASSWORD,
     CONF_SCAN_MINUTES,
     CONF_SUPPLY_ADDRESS,
@@ -324,18 +327,33 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class EmasesaOptionsFlow(OptionsFlow):
-    """Permite ajustar el intervalo de sondeo."""
+    """Intervalo de sondeo, radio de incidencias y ubicación del suministro."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # El selector de ubicación devuelve un dict; se guarda plano.
+            datos = dict(user_input)
+            ubicacion = datos.pop("ubicacion", None)
+            if isinstance(ubicacion, dict):
+                datos[CONF_LATITUDE] = ubicacion.get("latitude")
+                datos[CONF_LONGITUDE] = ubicacion.get("longitude")
+            return self.async_create_entry(title="", data=datos)
 
         current = self.config_entry.options.get(CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES)
         radius = self.config_entry.options.get(
             CONF_INCIDENT_RADIUS, DEFAULT_INCIDENT_RADIUS
         )
+        # Por defecto, la ubicación de Home Assistant.
+        ubicacion = {
+            "latitude": self.config_entry.options.get(
+                CONF_LATITUDE, self.hass.config.latitude
+            ),
+            "longitude": self.config_entry.options.get(
+                CONF_LONGITUDE, self.hass.config.longitude
+            ),
+        }
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -344,6 +362,7 @@ class EmasesaOptionsFlow(OptionsFlow):
                         vol.Coerce(int),
                         vol.Range(min=MIN_SCAN_MINUTES, max=MAX_SCAN_MINUTES),
                     ),
+                    vol.Optional("ubicacion", default=ubicacion): LocationSelector(),
                     vol.Required(CONF_INCIDENT_RADIUS, default=radius): vol.All(
                         vol.Coerce(int),
                         vol.Range(min=MIN_INCIDENT_RADIUS, max=MAX_INCIDENT_RADIUS),

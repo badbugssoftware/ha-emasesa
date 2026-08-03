@@ -54,7 +54,11 @@
       "init": {
         "title": "EMASESA options",
         "data": {
-          "scan_minutes": "Update interval (minutes, min. 15)"
+          "scan_minutes": "Update interval (minutes, min. 15)",
+          "ubicacion": "Supply location"
+        },
+        "data_description": {
+          "ubicacion": "Where this supply is. Defaults to your Home Assistant location; change it if the contract is for another home or a business."
         }
       }
     }

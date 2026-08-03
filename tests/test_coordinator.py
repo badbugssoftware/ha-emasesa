@@ -71,6 +71,9 @@ def coordinator() -> EmasesaCoordinator:
     coord._tz = None
     coord._warned_no_hourly = False
     coord._last_import_empty = False
+    coord.incident_radius_m = 1000
+    coord.latitude = None
+    coord.longitude = None
     coord._last_stat = AsyncMock(return_value=None)
     return coord
 
@@ -540,3 +543,54 @@ async def test_dia_sin_detalle_horario_genera_punto_diario(coordinator, stats_ca
     assert _es_monotona([s["sum"] for s in stats])
     # y al haber producido puntos, el backfill no se degrada
     assert coordinator._last_import_empty is False
+
+
+@pytest.mark.asyncio
+async def test_incidencias_usan_la_ubicacion_del_contrato(coordinator):
+    """Con un segundo contrato, las incidencias son las de ESE suministro."""
+    # Actuación junto a la Giralda; la "casa" de HA está lejos.
+    coordinator.client.get_network_actions = AsyncMock(
+        return_value=[
+            {
+                "categoria": "Salidero en acera",
+                "direccion": "centro",
+                "inicio": "30/07/2026 12:19",
+                "latitud": 37.3861,
+                "longitud": -5.9926,
+            },
+        ]
+    )
+    coordinator.incident_radius_m = 1000
+
+    class _Cfg:
+        latitude, longitude = 37.4031, -5.9832  # ubicación de Home Assistant
+
+    coordinator.hass = type("H", (), {"config": _Cfg})()
+
+    # Sin ubicación propia usa la de HA: la actuación queda fuera del radio.
+    coordinator.latitude = coordinator.longitude = None
+    assert (await coordinator._fetch_nearby_incidents())["cercanas"] == []
+
+    # Con la ubicación del contrato al lado, sí la detecta.
+    coordinator.latitude, coordinator.longitude = 37.3860, -5.9925
+    cercanas = (await coordinator._fetch_nearby_incidents())["cercanas"]
+    assert len(cercanas) == 1
+    assert cercanas[0]["categoria"] == "Salidero en acera"
+
+
+@pytest.mark.asyncio
+async def test_incidencias_sin_ubicacion_no_revientan(coordinator):
+    """Home Assistant sin coordenadas configuradas: se informa, no se falla."""
+    coordinator.client.get_network_actions = AsyncMock(
+        return_value=[{"latitud": 37.4, "longitud": -6.0}]
+    )
+
+    class _Cfg:
+        latitude = longitude = None
+
+    coordinator.hass = type("H", (), {"config": _Cfg})()
+    coordinator.latitude = coordinator.longitude = None
+
+    datos = await coordinator._fetch_nearby_incidents()
+    assert datos["cercanas"] == []
+    assert datos["sin_ubicacion"] is True

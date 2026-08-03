@@ -54,7 +54,11 @@
       "init": {
         "title": "Opciones de EMASESA",
         "data": {
-          "scan_minutes": "Intervalo de actualización (minutos, mín. 15)"
+          "scan_minutes": "Intervalo de actualización (minutos, mín. 15)",
+          "ubicacion": "Ubicación del suministro"
+        },
+        "data_description": {
+          "ubicacion": "Dónde está este suministro. Por defecto, la ubicación de Home Assistant; cámbiala si el contrato es de otra vivienda o de un local."
         }
       }
     }

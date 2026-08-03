@@ -69,6 +69,10 @@ LEAK_MIN_LITERS = 1.0
 
 # Radio (metros) para considerar "cercana" una incidencia de la red.
 CONF_INCIDENT_RADIUS = "incident_radius_m"
+# Ubicación del suministro. Por defecto la de Home Assistant, pero un segundo
+# contrato (otra vivienda, un local) no tiene por qué estar donde está HA.
+CONF_LATITUDE = "latitude"
+CONF_LONGITUDE = "longitude"
 DEFAULT_INCIDENT_RADIUS = 1000
 MIN_INCIDENT_RADIUS = 100
 MAX_INCIDENT_RADIUS = 20000

@@ -26,6 +26,8 @@ from .const import (
     CONF_CONTRACT_ID,
     CONF_DEVICE_ID,
     CONF_INCIDENT_RADIUS,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
     CONF_PASSWORD,
     CONF_SCAN_MINUTES,
     CONF_USERNAME,
@@ -85,6 +87,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_CONTRACT_ID],
         timedelta(minutes=scan_minutes),
         entry.options.get(CONF_INCIDENT_RADIUS, DEFAULT_INCIDENT_RADIUS),
+        entry.options.get(CONF_LATITUDE),
+        entry.options.get(CONF_LONGITUDE),
     )
     await coordinator.async_config_entry_first_refresh()
 

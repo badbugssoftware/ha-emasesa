@@ -63,6 +63,8 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         contract_id: str,
         scan_interval: timedelta,
         incident_radius_m: int = DEFAULT_INCIDENT_RADIUS,
+        latitude: float | None = None,
+        longitude: float | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -75,6 +77,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.statistic_id = f"{DOMAIN}:{self.contract_id}_water"
         self.cost_statistic_id = f"{DOMAIN}:{self.contract_id}_water_cost"
         self.incident_radius_m = incident_radius_m
+        # None = usar la ubicación de Home Assistant.
+        self.latitude = latitude
+        self.longitude = longitude
         self._tz = None
         self._warned_no_hourly = False
         # Si un import no produce puntos, la próxima ventana se acorta en vez
@@ -298,10 +303,27 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
     async def _fetch_nearby_incidents(self) -> dict[str, Any]:
-        """Incidencias de la red de EMASESA cercanas a la vivienda."""
+        """Incidencias de la red de EMASESA cercanas al suministro.
+
+        Se usa la ubicación configurada para este contrato; si no hay, la de
+        Home Assistant. Con varios contratos, las incidencias del segundo no
+        son las de la casa.
+        """
         actuaciones = await self.client.get_network_actions()
-        home_lat = self.hass.config.latitude
-        home_lon = self.hass.config.longitude
+        home_lat = (
+            self.latitude if self.latitude is not None else self.hass.config.latitude
+        )
+        home_lon = (
+            self.longitude if self.longitude is not None else self.hass.config.longitude
+        )
+        if home_lat is None or home_lon is None:
+            # HA sin ubicación configurada: no se puede medir distancia.
+            return {
+                "total_ciudad": len(actuaciones),
+                "cercanas": [],
+                "radio_m": self.incident_radius_m,
+                "sin_ubicacion": True,
+            }
         cercanas: list[dict[str, Any]] = []
         for act in actuaciones:
             lat, lon = act.get("latitud"), act.get("longitud")
