@@ -63,7 +63,9 @@ def stats_calls(monkeypatch) -> list[tuple[dict, list[dict]]]:
 def coordinator() -> EmasesaCoordinator:
     """Coordinador sin `hass`: sólo se ejercita la lógica de conversión."""
     coord = EmasesaCoordinator.__new__(EmasesaCoordinator)
-    coord.hass = object()  # nunca se usa: el recorder está parcheado
+    # hass mínimo: el recorder está parcheado, pero la caché de datos
+    # globales sí usa hass.data.
+    coord.hass = type("H", (), {"data": {}})()
     coord.client = AsyncMock()
     coord.contract_id = CONTRACT_ID
     coord.statistic_id = f"{DOMAIN}:{CONTRACT_ID}_water"
@@ -565,7 +567,7 @@ async def test_incidencias_usan_la_ubicacion_del_contrato(coordinator):
     class _Cfg:
         latitude, longitude = 37.4031, -5.9832  # ubicación de Home Assistant
 
-    coordinator.hass = type("H", (), {"config": _Cfg})()
+    coordinator.hass = type("H", (), {"config": _Cfg, "data": {}})()
 
     # Sin ubicación propia usa la de HA: la actuación queda fuera del radio.
     coordinator.latitude = coordinator.longitude = None
@@ -588,9 +590,54 @@ async def test_incidencias_sin_ubicacion_no_revientan(coordinator):
     class _Cfg:
         latitude = longitude = None
 
-    coordinator.hass = type("H", (), {"config": _Cfg})()
+    coordinator.hass = type("H", (), {"config": _Cfg, "data": {}})()
     coordinator.latitude = coordinator.longitude = None
 
     datos = await coordinator._fetch_nearby_incidents()
     assert datos["cercanas"] == []
     assert datos["sin_ubicacion"] is True
+
+
+@pytest.mark.asyncio
+async def test_datos_globales_se_piden_una_sola_vez(coordinator):
+    """Embalses y red son iguales para todos los contratos: se cachean.
+
+    Antes se pedían una vez por entrada, multiplicando llamadas a la API
+    privada sin ganar nada cuando alguien tiene varios contratos.
+    """
+    coordinator.hass = type("H", (), {"data": {}})()
+    llamadas = {"n": 0}
+
+    async def _fake():
+        llamadas["n"] += 1
+        return {
+            "embalses": [
+                {
+                    "embalse": "Cala",
+                    "vol_embalsado": 39.4,
+                    "capacidad": 57.52,
+                    "porc_llenado": 68.5,
+                }
+            ]
+        }
+
+    coordinator.client.get_reservoirs = _fake
+
+    a = await coordinator._fetch_reservoirs()
+    b = await coordinator._fetch_reservoirs()
+    assert llamadas["n"] == 1, "la segunda vez sale de la caché"
+    assert a == b
+
+    # Un segundo contrato comparte hass.data, así que tampoco vuelve a pedirlo.
+    otro = EmasesaCoordinator.__new__(EmasesaCoordinator)
+    otro.hass = coordinator.hass
+    otro.client = coordinator.client
+    await otro._fetch_reservoirs()
+    assert llamadas["n"] == 1
+
+    # Pasado el TTL sí se refresca.
+    cache = coordinator.hass.data[DOMAIN]["_global_cache"]
+    viejo, valor = cache["embalses"]
+    cache["embalses"] = (viejo - coordinator_module.GLOBAL_CACHE_TTL, valor)
+    await coordinator._fetch_reservoirs()
+    assert llamadas["n"] == 2

@@ -43,6 +43,10 @@ _LOGGER = logging.getLogger(__name__)
 
 _TZ_NAME = "Europe/Madrid"
 
+# Caché de los datos que no dependen del contrato (embalses, red).
+_CACHE_KEY = "_global_cache"
+GLOBAL_CACHE_TTL = timedelta(hours=1)
+
 # HA 2025.11+ sustituye has_mean por mean_type en StatisticMetaData; usamos
 # mean_type si está disponible y caemos a has_mean en versiones antiguas.
 try:
@@ -231,6 +235,22 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         _LOGGER.info("Histórico de EMASESA reimportado: %s días", days)
 
+    async def _cached_global(self, clave: str, coro_factory) -> Any:
+        """Datos iguales para todos los contratos, pedidos una sola vez.
+
+        Los embalses y las actuaciones de red no dependen del contrato, pero
+        antes se pedían una vez por entrada: con varios contratos se
+        multiplicaban las llamadas a la API sin ganar nada.
+        """
+        cache = self.hass.data.setdefault(DOMAIN, {}).setdefault(_CACHE_KEY, {})
+        entrada = cache.get(clave)
+        ahora = dt_util.utcnow()
+        if entrada and (ahora - entrada[0]) < GLOBAL_CACHE_TTL:
+            return entrada[1]
+        valor = await coro_factory()
+        cache[clave] = (ahora, valor)
+        return valor
+
     async def _safe(self, coro, what: str) -> Any:
         """Ejecuta una llamada opcional; si falla, avisa y devuelve None.
 
@@ -275,7 +295,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _fetch_reservoirs(self) -> dict[str, Any]:
         """Embalses que abastecen a Sevilla (% de llenado conjunto)."""
-        data = await self.client.get_reservoirs()
+        data = await self._cached_global("embalses", self.client.get_reservoirs)
         embalses = (data or {}).get("embalses") or []
         vol = sum(float(e.get("vol_embalsado") or 0) for e in embalses)
         cap = sum(float(e.get("capacidad") or 0) for e in embalses)
@@ -309,7 +329,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Home Assistant. Con varios contratos, las incidencias del segundo no
         son las de la casa.
         """
-        actuaciones = await self.client.get_network_actions()
+        actuaciones = await self._cached_global(
+            "red_actuaciones", self.client.get_network_actions
+        )
         home_lat = (
             self.latitude if self.latitude is not None else self.hass.config.latitude
         )
