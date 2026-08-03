@@ -643,26 +643,23 @@ async def test_datos_globales_se_piden_una_sola_vez(coordinator):
     assert llamadas["n"] == 2
 
 
-def test_embalses_cuelgan_del_contrato_como_subdispositivo():
-    """Los embalses van en un sub-dispositivo, no sueltos junto al consumo.
+def test_el_dispositivo_lleva_los_datos_del_contador():
+    """Un solo dispositivo por contrato, con el contador real dentro.
 
-    Son datos de la ciudad, no del suministro del usuario: mezclarlos con las
-    facturas y el contador confundía. `via_device` los anida bajo el contrato.
+    Los embalses colgaron de un sub-dispositivo propio entre la 0.5.1 y la
+    0.6.0; se retiró porque metía un cacharro de más en la lista. Que no
+    vuelva a haber más de un dispositivo se comprueba en `test_entities.py`.
     """
-    from custom_components.emasesa.entity import (
-        build_device_info,
-        build_reservoir_device_info,
-    )
+    from custom_components.emasesa.entity import build_device_info
 
     coord = EmasesaCoordinator.__new__(EmasesaCoordinator)
     coord.contract_id = CONTRACT_ID
     coord.data = {"meter": {"fabricante": "CONTAZARA", "modelo": "CZ4000 C1"}}
     entry = type("E", (), {"data": {"contrato_numero": "0012345678"}})()
 
-    padre = build_device_info(coord, entry)
-    hijo = build_reservoir_device_info(coord, entry)
+    device = build_device_info(coord, entry)
 
-    # el hijo apunta al padre y tiene identificador propio
-    assert hijo["via_device"] == (DOMAIN, CONTRACT_ID)
-    assert hijo["identifiers"] == {(DOMAIN, f"{CONTRACT_ID}_embalses")}
-    assert hijo["identifiers"] != padre["identifiers"]
+    assert device["identifiers"] == {(DOMAIN, CONTRACT_ID)}
+    assert device["name"] == "EMASESA 0012345678"
+    assert device["manufacturer"] == "CONTAZARA"
+    assert device["model"] == "CZ4000 C1"

@@ -17,7 +17,11 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
@@ -41,6 +45,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import EmasesaCoordinator
+from .entity import LEGACY_RESERVOIR_DEVICE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,9 +99,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Después de montar las plataformas, no antes: para entonces los sensores
+    # de embalses ya se han reasignado al dispositivo del contrato.
+    _retirar_dispositivo_de_embalses(hass, entry, coordinator)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     _async_register_services(hass)
     return True
+
+
+@callback
+def _retirar_dispositivo_de_embalses(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: EmasesaCoordinator
+) -> None:
+    """Borra el sub-dispositivo de embalses que existía hasta la 0.6.0.
+
+    Sus sensores ahora cuelgan del dispositivo del contrato, así que se queda
+    vacío. Sólo se borra si de verdad no le queda ninguna entidad: si algo
+    fuese mal en la reasignación, es preferible dejar un dispositivo de más
+    que llevarse por delante el histórico de alguien.
+    """
+    registro = dr.async_get(hass)
+    dispositivo = registro.async_get_device(
+        identifiers={(DOMAIN, f"{coordinator.contract_id}{LEGACY_RESERVOIR_DEVICE}")}
+    )
+    if dispositivo is None:
+        return
+    if er.async_entries_for_device(
+        er.async_get(hass), dispositivo.id, include_disabled_entities=True
+    ):
+        return
+    registro.async_remove_device(dispositivo.id)
+    _LOGGER.debug(
+        "Retirado el sub-dispositivo de embalses del contrato %s", entry.title
+    )
 
 
 SERVICE_SIMULAR = "simular_factura"

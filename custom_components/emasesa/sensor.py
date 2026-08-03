@@ -44,8 +44,6 @@ class EmasesaSensorEntityDescription(SensorEntityDescription):
 
     value_fn: Callable[[Datos], StateType]
     attrs_fn: Callable[[Datos], dict[str, Any]] | None = None
-    # Cuelga la entidad del sub-dispositivo de embalses en vez de del contrato.
-    embalses: bool = False
     # Para entidades que dependen de datos que la API puede no traer.
     available_fn: Callable[[Datos], bool] | None = None
 
@@ -77,11 +75,19 @@ def _dias_hasta_proxima_factura(d: Datos) -> int | None:
 
 
 def _atributos_embalses(d: Datos) -> dict[str, Any]:
+    """Estado conjunto y, dentro, el desglose de cada embalse.
+
+    El desglose va aquí para que se vea de un vistazo a qué embalses se
+    refiere sin tener que activar un sensor por cada uno. Lo que no da un
+    atributo es histórico: para graficar la evolución de un embalse concreto
+    hay que activar su sensor (vienen desactivados de fábrica).
+    """
     e = _embalses(d)
     attrs: dict[str, Any] = {
         "fecha": e.get("fecha"),
         "volumen_hm3": e.get("vol_embalsado_hm3"),
         "capacidad_hm3": e.get("capacidad_hm3"),
+        "por_embalse": e.get("por_embalse") or [],
     }
     attrs.update(e.get("detalle") or {})
     return attrs
@@ -223,7 +229,6 @@ SENSORES: tuple[EmasesaSensorEntityDescription, ...] = (
         icon="mdi:waves",
         value_fn=lambda d: _embalses(d).get("porc_llenado"),
         attrs_fn=_atributos_embalses,
-        embalses=True,
     ),
 )
 
@@ -234,6 +239,11 @@ def _descripcion_embalse(nombre: str) -> EmasesaSensorEntityDescription:
     La lista la decide la API, así que estas descripciones se construyen en
     tiempo de ejecución. El nombre se muestra tal cual porque no hay clave de
     traducción posible para algo que no conocemos de antemano.
+
+    Vienen DESACTIVADAS: seis sensores más para un dato que ya está en los
+    atributos del sensor conjunto sobrecargan la lista de la mayoría. Quien
+    quiera graficar un embalse suelto lo activa desde el dispositivo, y desde
+    ese momento tiene histórico.
     """
     slug = re.sub(r"[^a-z0-9]+", "_", nombre.lower()).strip("_")
 
@@ -250,7 +260,7 @@ def _descripcion_embalse(nombre: str) -> EmasesaSensorEntityDescription:
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         icon="mdi:water-well",
-        embalses=True,
+        entity_registry_enabled_default=False,
         value_fn=lambda d: _datos(d).get("porc_llenado"),
         available_fn=lambda d: bool(_datos(d)),
         attrs_fn=lambda d: {
@@ -293,9 +303,7 @@ class EmasesaSensor(EmasesaEntity, SensorEntity):
         entry: ConfigEntry,
         description: EmasesaSensorEntityDescription,
     ) -> None:
-        super().__init__(
-            coordinator, entry, description.key, embalses=description.embalses
-        )
+        super().__init__(coordinator, entry, description.key)
         self.entity_description = description
 
     @property

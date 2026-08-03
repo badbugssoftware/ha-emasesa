@@ -275,7 +275,27 @@ async def test_fecha_de_factura_ilegible(hass: HomeAssistant) -> None:
 # --------------------------------------------------------------------------- #
 # Embalses
 # --------------------------------------------------------------------------- #
-async def test_embalse_conjunto_y_por_embalse(hass: HomeAssistant) -> None:
+async def _habilitar_embalses(
+    hass: HomeAssistant, entry: MockConfigEntry, datos: dict[str, Any] | None = None
+) -> None:
+    """Activa los sensores por embalse, que vienen desactivados de fábrica."""
+    registro = er.async_get(hass)
+    for e in er.async_entries_for_config_entry(registro, entry.entry_id):
+        if "_embalse_" in e.unique_id:
+            registro.async_update_entity(e.entity_id, disabled_by=None)
+
+    with patch(
+        "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
+        return_value=DATOS if datos is None else datos,
+    ):
+        await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_el_sensor_conjunto_lleva_el_desglose_en_atributos(
+    hass: HomeAssistant,
+) -> None:
+    """Para ver a qué embalses se refiere sin activar seis sensores más."""
     await setup_integration(hass)
 
     conjunto = estado(hass, "sensor", "embalses")
@@ -284,40 +304,161 @@ async def test_embalse_conjunto_y_por_embalse(hass: HomeAssistant) -> None:
     # El `detalle` de la API se vuelca como atributos extra.
     assert conjunto.attributes["situacion"] == "NORMAL"
 
+    desglose = conjunto.attributes["por_embalse"]
+    assert [e["nombre"] for e in desglose] == ["Aracena", "La Minilla"]
+    assert desglose[0]["porc_llenado"] == 76.2
+
+
+async def test_los_sensores_por_embalse_vienen_desactivados(
+    hass: HomeAssistant,
+) -> None:
+    """Seis sensores más para un dato que ya está en los atributos estorban.
+
+    Se crean igual, para que quien quiera histórico de un embalse concreto
+    sólo tenga que activarlo.
+    """
+    entry = await setup_integration(hass)
+    registro = er.async_get(hass)
+
+    por_embalse = [
+        e
+        for e in er.async_entries_for_config_entry(registro, entry.entry_id)
+        if "_embalse_" in e.unique_id
+    ]
+    assert len(por_embalse) == 2
+    assert all(
+        e.disabled_by is er.RegistryEntryDisabler.INTEGRATION for e in por_embalse
+    )
+    # Y por tanto no publican estado mientras no se activen.
+    assert hass.states.get(por_embalse[0].entity_id) is None
+
+    # El sensor conjunto, en cambio, sí está activo desde el principio.
+    assert estado(hass, "sensor", "embalses").state == "80.4"
+
+
+async def test_al_activarlos_publican_su_nivel(hass: HomeAssistant) -> None:
+    entry = await setup_integration(hass)
+    await _habilitar_embalses(hass, entry)
+
     aracena = estado(hass, "sensor", "embalse_aracena")
     assert aracena.state == "76.2"
     assert aracena.attributes["embalse"] == "Aracena"
     assert aracena.attributes["volumen_hm3"] == 96.4
     assert aracena.attributes["fecha"] == "2026-08-01"
 
-    minilla = estado(hass, "sensor", "embalse_la_minilla")
-    assert minilla.state == "91.3"
+    assert estado(hass, "sensor", "embalse_la_minilla").state == "91.3"
 
 
-async def test_los_embalses_cuelgan_de_un_subdispositivo(
-    hass: HomeAssistant,
-) -> None:
-    """No son entidades sueltas: van anidadas bajo el dispositivo del contrato.
+async def test_no_hay_subdispositivo_de_embalses(hass: HomeAssistant) -> None:
+    """Todo cuelga del dispositivo del contrato: un cacharro, no dos.
 
-    Los embalses son de la ciudad, no del suministro del usuario; mezclarlos
-    con su consumo y sus facturas confunde.
+    Hasta la 0.6.0 los embalses colgaban de un sub-dispositivo propio. Separaba
+    bien lo de la ciudad de lo del usuario, pero a cambio metía un dispositivo
+    de más en la lista para seis sensores que casi nadie mira.
     """
     await setup_integration(hass)
     registro = dr.async_get(hass)
 
     contrato = registro.async_get_device(identifiers={(DOMAIN, CONTRACT_ID)})
-    embalses = registro.async_get_device(
-        identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")}
-    )
     assert contrato is not None
-    assert embalses is not None
-    assert embalses.via_device_id == contrato.id
-    assert embalses.name == "Embalses EMASESA 0012345678"
+    assert (
+        registro.async_get_device(identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")})
+        is None
+    )
 
-    # Y el dispositivo del contrato lleva los datos reales del contador.
+    # Los sensores de embalses son del dispositivo del contrato.
+    entidad = er.async_get(hass).async_get(
+        er.async_get(hass).async_get_entity_id(
+            "sensor", DOMAIN, f"{CONTRACT_ID}_embalses"
+        )
+    )
+    assert entidad.device_id == contrato.id
+
+    # Y ese dispositivo lleva los datos reales del contador.
     assert contrato.manufacturer == "Contazara"
     assert contrato.model == "CZ2000"
     assert contrato.serial_number == "20345678"
+
+
+async def test_se_retira_el_subdispositivo_de_versiones_anteriores(
+    hass: HomeAssistant,
+) -> None:
+    """Quien venga de la 0.5.1 tiene el dispositivo vacío: hay que quitarlo."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=CONTRACT_ID,
+        data={
+            CONF_USERNAME: USERNAME,
+            CONF_PASSWORD: PASSWORD,
+            CONF_DEVICE_ID: "dispositivo-1",
+            CONF_CONTRACT_ID: CONTRACT_ID,
+            CONF_CONTRACT_NUMBER: "0012345678",
+        },
+    )
+    entry.add_to_hass(hass)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")},
+        name="Embalses EMASESA 0012345678",
+    )
+
+    with patch(
+        "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
+        return_value=DATOS,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert (
+        dr.async_get(hass).async_get_device(
+            identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")}
+        )
+        is None
+    )
+
+
+async def test_no_se_retira_el_subdispositivo_si_le_quedan_entidades(
+    hass: HomeAssistant,
+) -> None:
+    """Ante la duda, un dispositivo de más antes que borrarle el histórico."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=CONTRACT_ID,
+        data={
+            CONF_USERNAME: USERNAME,
+            CONF_PASSWORD: PASSWORD,
+            CONF_DEVICE_ID: "dispositivo-1",
+            CONF_CONTRACT_ID: CONTRACT_ID,
+            CONF_CONTRACT_NUMBER: "0012345678",
+        },
+    )
+    entry.add_to_hass(hass)
+    viejo = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")},
+        name="Embalses EMASESA 0012345678",
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{CONTRACT_ID}_algo_que_no_migro",
+        config_entry=entry,
+        device_id=viejo.id,
+    )
+
+    with patch(
+        "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
+        return_value=DATOS,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert (
+        dr.async_get(hass).async_get_device(
+            identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")}
+        )
+        is not None
+    )
 
 
 async def test_sin_embalses_no_se_crean_sensores_individuales(
@@ -340,12 +481,11 @@ async def test_embalse_que_desaparece_queda_no_disponible(
     hass: HomeAssistant,
 ) -> None:
     """Si la API deja de mandar un embalse, su sensor no inventa un valor."""
-    await setup_integration(hass)
+    entry = await setup_integration(hass)
+    await _habilitar_embalses(hass, entry)
     assert estado(hass, "sensor", "embalse_aracena").state == "76.2"
 
-    coordinator = hass.data[DOMAIN][
-        hass.config_entries.async_entries(DOMAIN)[0].entry_id
-    ]
+    coordinator = hass.data[DOMAIN][entry.entry_id]
     coordinator.async_set_updated_data(
         {**DATOS, "embalses": {**DATOS["embalses"], "por_embalse": []}}
     )

@@ -124,6 +124,13 @@ con el fabricante, modelo y número de serie reales del contador:
 | **Importe pendiente** | `sensor.emasesa_12345678_importe_pendiente` | `EUR` | `monetary` | – |
 | **Días para la próxima factura** | `sensor.emasesa_12345678_dias_para_la_proxima_factura` | `d` | – | – |
 | **Embalses** | `sensor.emasesa_12345678_embalses` | `%` | – | `measurement` |
+| **Cada embalse** ⚪ | `sensor.emasesa_12345678_aracena` | `%` | – | `measurement` |
+
+⚪ Se crea un sensor por cada embalse (Aracena, Zufre, La Minilla…), pero vienen
+**desactivados**: el desglose ya está en los atributos del sensor conjunto, y seis
+entidades más recargan la lista sin aportar nada a la mayoría. Si quieres graficar la
+evolución de uno concreto, actívalo desde el dispositivo y a partir de ahí tendrá
+histórico.
 
 ### Sensores binarios
 
@@ -187,8 +194,8 @@ con el fabricante, modelo y número de serie reales del contador:
 
 **Días para la próxima factura**: `periodo_desde` y `proxima_factura`.
 
-**Embalses**: `fecha`, `volumen_hm3`, `capacidad_hm3` y un atributo por embalse con su
-porcentaje de llenado.
+**Embalses**: `fecha`, `volumen_hm3`, `capacidad_hm3` y `por_embalse`, una lista con el
+nombre, el porcentaje de llenado y el volumen de cada embalse.
 
 **Posible fuga**
 
