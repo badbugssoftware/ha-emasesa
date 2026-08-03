@@ -20,7 +20,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import ATTRIBUTION, DOMAIN
 from .coordinator import EmasesaCoordinator
-from .entity import build_device_info
+from .entity import build_device_info, build_reservoir_device_info
 
 
 async def async_setup_entry(
@@ -316,6 +316,7 @@ class EmasesaReservoirSensor(EmasesaBaseSensor):
     def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{coordinator.contract_id}_embalses"
+        self._attr_device_info = build_reservoir_device_info(coordinator, entry)
 
     @property
     def native_value(self) -> float | None:
@@ -352,9 +353,10 @@ class EmasesaReservoirDetailSensor(EmasesaBaseSensor):
         self._nombre = nombre
         slug = re.sub(r"[^a-z0-9]+", "_", nombre.lower()).strip("_")
         self._attr_unique_id = f"{coordinator.contract_id}_embalse_{slug}"
+        self._attr_device_info = build_reservoir_device_info(coordinator, entry)
         # Nombre dinámico: no hay clave de traducción posible para algo que
         # decide la API. Con has_entity_name queda "EMASESA <contrato> Aracena".
-        self._attr_name = f"Embalse {nombre}"
+        self._attr_name = nombre
 
     def _datos(self) -> dict[str, Any]:
         embalses = (self.coordinator.data or {}).get("embalses", {})
