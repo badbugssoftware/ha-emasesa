@@ -663,3 +663,60 @@ def test_el_dispositivo_lleva_los_datos_del_contador():
     assert device["name"] == "EMASESA 0012345678"
     assert device["manufacturer"] == "CONTAZARA"
     assert device["model"] == "CZ4000 C1"
+
+
+# --------------------------------------------------------------------------- #
+# Qué día se enseña en los sensores
+# --------------------------------------------------------------------------- #
+def test_se_usa_el_dia_mas_reciente_no_el_de_ultimo():
+    """El endpoint /ultimo va un día por detrás del histórico horario.
+
+    Caso real: el sensor del índice mostraba el 2 de agosto (443,603 m³)
+    mientras las estadísticas ya tenían el 3 de agosto a mediodía (443,613).
+    La integración enseñaba un dato más viejo que el que ella misma acababa
+    de escribir en el panel de Energía.
+    """
+    from custom_components.emasesa.coordinator import _dia_mas_reciente
+
+    cerrado = build_day("2026-08-02", 443601, [0] * 23 + [2])
+    en_curso = build_day("2026-08-03", 443603, [0, 0, 0, 0, 9, 1])
+
+    elegido = _dia_mas_reciente({d["fecha"]: d for d in (cerrado, en_curso)})
+
+    assert elegido["fecha"] == "2026-08-03"
+    assert elegido["indice"] == 443613
+
+
+def test_un_dia_reciente_sin_lectura_no_tapa_al_anterior():
+    """Un hueco de telelectura no puede dejar el sensor en desconocido."""
+    from custom_components.emasesa.coordinator import _dia_mas_reciente
+
+    bueno = build_day("2026-08-02", 443601, [0] * 23 + [2])
+    vacio = {"fecha": "2026-08-03", "indice": None, "detalle": []}
+
+    elegido = _dia_mas_reciente({d["fecha"]: d for d in (bueno, vacio)})
+
+    assert elegido["fecha"] == "2026-08-02"
+    assert elegido["indice"] == 443603
+
+
+def test_sin_ningun_dia_con_lectura_no_se_elige_nada():
+    """Contrato sin telelectura: se cae al valor del contador (lo hace quien llama)."""
+    from custom_components.emasesa.coordinator import _dia_mas_reciente
+
+    assert _dia_mas_reciente({}) is None
+    assert _dia_mas_reciente({"2026-08-03": {"fecha": "2026-08-03"}}) is None
+
+
+def test_el_orden_de_las_fechas_no_es_alfabetico_por_casualidad():
+    """Fechas ISO de meses y años distintos, para que no cuele un max() ingenuo."""
+    from custom_components.emasesa.coordinator import _dia_mas_reciente
+
+    dias = [
+        build_day("2025-12-31", 400000, [1]),
+        build_day("2026-01-01", 400001, [1]),
+        build_day("2026-09-09", 400002, [1]),
+        build_day("2026-10-10", 400003, [1]),
+    ]
+    elegido = _dia_mas_reciente({d["fecha"]: d for d in dias})
+    assert elegido["fecha"] == "2026-10-10"

@@ -57,6 +57,29 @@ except ImportError:  # pragma: no cover
     _MEAN_TYPE_NONE = None
 
 
+def _dia_mas_reciente(days_data: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    """El día con lectura del contador más fresco de todos los que hay.
+
+    No basta con el endpoint `/ultimo`: devuelve el último día CERRADO,
+    mientras que el histórico horario ya trae el día en curso a medias. Fiarse
+    sólo de `/ultimo` dejaba el sensor del índice mostrando un valor más
+    antiguo que el que la propia integración acababa de escribir en las
+    estadísticas del panel de Energía.
+
+    Se descartan los días sin `indice` numérico (huecos de telelectura): un
+    día más reciente pero vacío no debe tapar a uno anterior que sí tiene
+    lectura.
+    """
+    con_lectura = [
+        d
+        for d in days_data.values()
+        if isinstance(d.get("indice"), (int, float)) and d.get("fecha")
+    ]
+    if not con_lectura:
+        return None
+    return max(con_lectura, key=lambda d: str(d["fecha"]))
+
+
 class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Sondea la API de EMASESA e importa el histórico horario a estadísticas."""
 
@@ -126,7 +149,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if isinstance(meter_raw, dict)
             else {}
         )
-        today = today_raw if isinstance(today_raw, dict) else {}
+        today = _dia_mas_reciente(days_data) or (
+            today_raw if isinstance(today_raw, dict) else {}
+        )
         indice_l = today.get("indice")
 
         # --- Coste estimado del periodo (simulador oficial de EMASESA) -------
