@@ -720,3 +720,74 @@ def test_el_orden_de_las_fechas_no_es_alfabetico_por_casualidad():
     ]
     elegido = _dia_mas_reciente({d["fecha"]: d for d in dias})
     assert elegido["fecha"] == "2026-10-10"
+
+
+def _dia_en_curso(fecha: str, indice_inicial: int, horas_con_dato: int) -> dict:
+    """Un día EN CURSO tal y como lo manda la API.
+
+    Forma real capturada de la API: `indice` del día a null (aún no ha
+    cerrado), 24 horas en el detalle, pero sólo las ya publicadas traen
+    lectura; el resto vienen también a null.
+    """
+    dia = build_day(fecha, indice_inicial, [1] * 24)
+    dia["indice"] = None
+    for i, hora in enumerate(dia["detalle"]):
+        if i >= horas_con_dato:
+            hora["indice"] = None
+            hora["consumo"] = 0
+    dia["consumo"] = horas_con_dato
+    return dia
+
+
+def test_el_dia_en_curso_cuenta_aunque_no_tenga_indice_de_cierre():
+    """El caso real que descuadraba sensor y estadísticas.
+
+    El 5 de agosto llegaba con `indice` del día a null y sólo 13 horas
+    publicadas, así que se descartaba entero y el sensor se quedaba en el
+    día 4 mientras el panel de Energía ya tenía el 5 a mediodía.
+    """
+    from custom_components.emasesa.coordinator import (
+        _dia_mas_reciente,
+        _indice_del_dia,
+    )
+
+    cerrado = build_day("2026-08-04", 443638, [0] * 23 + [127])
+    en_curso = _dia_en_curso("2026-08-05", 443765, horas_con_dato=13)
+
+    elegido = _dia_mas_reciente({d["fecha"]: d for d in (cerrado, en_curso)})
+
+    assert elegido["fecha"] == "2026-08-05"
+    # La lectura sale de la última hora publicada, no del cierre del día.
+    assert _indice_del_dia(elegido) == 443777
+
+
+def test_un_dia_sin_ninguna_hora_publicada_se_descarta():
+    """El día de mañana llega con todo a null: no puede tapar al de hoy."""
+    from custom_components.emasesa.coordinator import _dia_mas_reciente
+
+    ayer = build_day("2026-08-04", 443638, [0] * 23 + [127])
+    hoy = _dia_en_curso("2026-08-05", 443765, horas_con_dato=13)
+    manana = _dia_en_curso("2026-08-06", 443778, horas_con_dato=0)
+
+    elegido = _dia_mas_reciente({d["fecha"]: d for d in (ayer, hoy, manana)})
+    assert elegido["fecha"] == "2026-08-05"
+
+
+@pytest.mark.parametrize(
+    ("dia", "esperado"),
+    [
+        ({"indice": 443765}, 443765),
+        ({"indice": None, "detalle": [{"indice": 10}, {"indice": None}]}, 10),
+        ({"indice": None, "detalle": [{"indice": None}]}, None),
+        ({"indice": None, "detalle": []}, None),
+        ({"indice": None, "detalle": "KO"}, None),
+        ({"indice": None}, None),
+        ({}, None),
+        ({"indice": 0}, 0),
+    ],
+)
+def test_indice_del_dia(dia, esperado):
+    """Un índice 0 es una lectura válida, no un 'no hay dato'."""
+    from custom_components.emasesa.coordinator import _indice_del_dia
+
+    assert _indice_del_dia(dia) == esperado

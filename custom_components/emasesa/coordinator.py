@@ -57,6 +57,27 @@ except ImportError:  # pragma: no cover
     _MEAN_TYPE_NONE = None
 
 
+def _indice_del_dia(dia: dict[str, Any]) -> float | None:
+    """Lectura del contador de un día: la de cierre o la de su última hora.
+
+    Un día ya cerrado trae su `indice` (lectura al terminarlo). El día EN
+    CURSO lo trae a `null` —todavía no ha acabado— pero su detalle horario ya
+    tiene lecturas hasta la última hora publicada, y las horas posteriores
+    vienen también a `null`. Por eso se recorre el detalle de atrás hacia
+    delante buscando la última hora con lectura de verdad.
+    """
+    indice = dia.get("indice")
+    if isinstance(indice, (int, float)):
+        return indice
+    detalle = dia.get("detalle")
+    if not isinstance(detalle, list):
+        return None
+    for hora in reversed(detalle):
+        if isinstance(hora, dict) and isinstance(hora.get("indice"), (int, float)):
+            return hora["indice"]
+    return None
+
+
 def _dia_mas_reciente(days_data: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     """El día con lectura del contador más fresco de todos los que hay.
 
@@ -66,14 +87,14 @@ def _dia_mas_reciente(days_data: dict[str, dict[str, Any]]) -> dict[str, Any] | 
     antiguo que el que la propia integración acababa de escribir en las
     estadísticas del panel de Energía.
 
-    Se descartan los días sin `indice` numérico (huecos de telelectura): un
-    día más reciente pero vacío no debe tapar a uno anterior que sí tiene
-    lectura.
+    Se descartan los días sin ninguna lectura (el de mañana, o un hueco de
+    telelectura): un día más reciente pero vacío no debe tapar a uno anterior
+    que sí tiene dato.
     """
     con_lectura = [
         d
         for d in days_data.values()
-        if isinstance(d.get("indice"), (int, float)) and d.get("fecha")
+        if d.get("fecha") and _indice_del_dia(d) is not None
     ]
     if not con_lectura:
         return None
@@ -152,7 +173,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         today = _dia_mas_reciente(days_data) or (
             today_raw if isinstance(today_raw, dict) else {}
         )
-        indice_l = today.get("indice")
+        indice_l = _indice_del_dia(today)
 
         # --- Coste estimado del periodo (simulador oficial de EMASESA) -------
         coste_periodo = None
