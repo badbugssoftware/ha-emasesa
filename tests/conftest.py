@@ -71,16 +71,8 @@ def _patch_aioresponses_for_modern_aiohttp() -> None:
 _patch_aioresponses_for_modern_aiohttp()
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    """Fuerza el modo asyncio que exige pytest-homeassistant-custom-component.
-
-    Ese plugin registra fixtures asíncronas con autouse, así que sólo funciona
-    con `asyncio_mode = auto`. Se configura aquí (y no en un pytest.ini) para
-    que baste con ejecutar `pytest` desde la raíz del repositorio.
-    """
-    if config.getoption("asyncio_mode", None) is None:
-        config.option.asyncio_mode = "auto"
-    config.inicfg.setdefault("asyncio_default_fixture_loop_scope", "function")
+# El modo asyncio que exige pytest-homeassistant-custom-component se
+# configura en `pytest.ini`, en la raíz del repositorio.
 
 
 # --------------------------------------------------------------------------- #
