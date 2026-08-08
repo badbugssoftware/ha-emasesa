@@ -72,7 +72,6 @@ DATOS: dict[str, Any] = {
         "porc_llenado": 80.4,
         "vol_embalsado_hm3": 179.6,
         "capacidad_hm3": 223.4,
-        "detalle": {"situacion": "NORMAL"},
         "por_embalse": [
             {
                 "nombre": "Aracena",
@@ -301,8 +300,8 @@ async def test_el_sensor_conjunto_lleva_el_desglose_en_atributos(
     conjunto = estado(hass, "sensor", "embalses")
     assert conjunto.state == "80.4"
     assert conjunto.attributes["capacidad_hm3"] == 223.4
-    # El `detalle` de la API se vuelca como atributos extra.
-    assert conjunto.attributes["situacion"] == "NORMAL"
+    assert conjunto.attributes["volumen_hm3"] == 179.6
+    assert conjunto.attributes["fecha"] == "2026-08-01"
 
     desglose = conjunto.attributes["por_embalse"]
     assert [e["nombre"] for e in desglose] == ["Aracena", "La Minilla"]

@@ -463,7 +463,7 @@ class EmasesaClient:
         dt = date_to.strftime("%Y-%m-%d") if isinstance(date_to, date) else str(date_to)
         path = (
             f"/facturas/simulacion?sistema={SISTEMA}"
-            f"&consumo={int(round(float(consumo_m3)))}"
+            f"&consumo={round(float(consumo_m3))}"
             f"&fechaDesde={df}&fechaHasta={dt}"
             f"&idContrato={contract_id}"
         )
@@ -472,8 +472,6 @@ class EmasesaClient:
 
 def _loads(text: str) -> Any:
     """json.loads tolerante a cuerpos vacíos."""
-    import json
-
     if not text or not text.strip():
         return {}
     return json.loads(text)

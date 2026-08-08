@@ -9,7 +9,7 @@ PLATFORMS = ["binary_sensor", "sensor"]
 
 # --- Endpoints de la API privada de la app "Mi Emasesa" -------------------
 API_ROOT = "https://api.emasesa.com"
-API_BASE = "https://api.emasesa.com/miemasesa/api/v1.0"
+API_BASE = f"{API_ROOT}/miemasesa/api/v1.0"
 TOKEN_URL = f"{API_ROOT}/oauth2/token?grant_type=client_credentials"
 
 # Credencial "client_credentials" embebida en el APK (entorno PRO).

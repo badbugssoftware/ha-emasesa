@@ -388,7 +388,8 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "porc_llenado": round(vol / cap * 100, 1) if cap else None,
             "vol_embalsado_hm3": round(vol, 2),
             "capacidad_hm3": round(cap, 2),
-            # Uno por embalse: cada uno tiene su propio sensor.
+            # Uno por embalse: alimenta su sensor y el desglose que publica
+            # el sensor conjunto en sus atributos.
             "por_embalse": [
                 {
                     "nombre": e.get("embalse"),
@@ -399,11 +400,6 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 for e in embalses
                 if e.get("embalse")
             ],
-            "detalle": {
-                e.get("embalse"): e.get("porc_llenado")
-                for e in embalses
-                if e.get("embalse")
-            },
         }
 
     async def _fetch_nearby_incidents(self) -> dict[str, Any]:
@@ -467,9 +463,16 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ]
         completos.sort(key=lambda d: d.get("fecha", ""))
         recientes = completos[-LEAK_NIGHTS:]
+        # Sin noches completas no se puede afirmar que NO haya fuga: el sensor
+        # se queda en "desconocido" en vez de decir que todo va bien.
+        sin_analizar = {
+            "detectada": None,
+            "analizado": False,
+            "noches": 0,
+            "min_l_h": None,
+        }
         if len(recientes) < LEAK_NIGHTS:
-            # Sin noches completas no se puede afirmar que NO haya fuga.
-            return {"detectada": None, "analizado": False, "noches": 0, "min_l_h": None}
+            return sin_analizar
 
         minimos: list[float] = []
         for day in recientes:
@@ -480,12 +483,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 and LEAK_HOUR_START <= int(h["hora"]) <= LEAK_HOUR_END
             ]
             if not franja:
-                return {
-                    "detectada": None,
-                    "analizado": False,
-                    "noches": 0,
-                    "min_l_h": None,
-                }
+                return sin_analizar
             minimos.append(min(franja))
 
         detectada = all(m >= LEAK_MIN_LITERS for m in minimos)

@@ -79,8 +79,8 @@ incluido el **coste en euros** calculado con el **simulador oficial de tarifas**
 
 ```mermaid
 flowchart LR
-    A["API privada<br/>Mi Emasesa"] --> B["Coordinator<br/>(cada 45 min)"]
-    B --> C["9 sensores +<br/>4 binary_sensors"]
+    A["API privada<br/>Mi Emasesa"] --> B["Coordinator<br/>(6 h / 2 h si espera dato)"]
+    B --> C["9 sensores + 1 por embalse<br/>+ 4 binary_sensors"]
     B --> D["Estadísticas externas<br/>emasesa:…_water<br/>emasesa:…_water_cost"]
     D --> E["Panel de Energía<br/>(agua + coste)"]
 ```

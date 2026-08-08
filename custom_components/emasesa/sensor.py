@@ -83,14 +83,12 @@ def _atributos_embalses(d: Datos) -> dict[str, Any]:
     hay que activar su sensor (vienen desactivados de fábrica).
     """
     e = _embalses(d)
-    attrs: dict[str, Any] = {
+    return {
         "fecha": e.get("fecha"),
         "volumen_hm3": e.get("vol_embalsado_hm3"),
         "capacidad_hm3": e.get("capacidad_hm3"),
         "por_embalse": e.get("por_embalse") or [],
     }
-    attrs.update(e.get("detalle") or {})
-    return attrs
 
 
 # --------------------------------------------------------------------------- #
