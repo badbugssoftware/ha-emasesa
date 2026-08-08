@@ -32,7 +32,6 @@ from custom_components.emasesa.const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_PASSWORD,
-    CONF_SCAN_MINUTES,
     CONF_SUPPLY_ADDRESS,
     CONF_USERNAME,
     DOMAIN,
@@ -698,7 +697,6 @@ async def test_opciones_guardan_la_ubicacion_plana(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            CONF_SCAN_MINUTES: 60,
             "ubicacion": {"latitude": 37.3891, "longitude": -5.9845},
             CONF_INCIDENT_RADIUS: 2500,
         },
@@ -706,7 +704,6 @@ async def test_opciones_guardan_la_ubicacion_plana(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options[CONF_SCAN_MINUTES] == 60
     assert entry.options[CONF_INCIDENT_RADIUS] == 2500
     assert entry.options[CONF_LATITUDE] == 37.3891
     assert entry.options[CONF_LONGITUDE] == -5.9845
@@ -728,19 +725,33 @@ async def test_opciones_proponen_la_ubicacion_de_home_assistant(
     assert defaults["ubicacion"] == {"latitude": 37.3826, "longitude": -5.9963}
 
 
-async def test_opciones_rechazan_un_intervalo_fuera_de_rango(
-    hass: HomeAssistant,
-) -> None:
-    """Sondear cada minuto contra una API privada no es una opción."""
+async def test_el_intervalo_de_sondeo_no_se_ofrece(hass: HomeAssistant) -> None:
+    """El ritmo lo decide la integración, no quien la instala.
+
+    Sondear más a menudo no adelanta el dato —EMASESA publica una vez al día—
+    y sólo multiplica las llamadas a una API privada. Y el coordinator ya se
+    adapta solo: se espacia cuando tiene el dato y acelera mientras lo espera,
+    algo que un número puesto a mano no puede hacer.
+    """
     entry = _entrada_existente(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
-    with pytest.raises(Exception):  # noqa: B017 - voluptuous.MultipleInvalid
-        await hass.config_entries.options.async_configure(
-            result["flow_id"],
-            {
-                CONF_SCAN_MINUTES: 1,
-                "ubicacion": {"latitude": 37.0, "longitude": -6.0},
-                CONF_INCIDENT_RADIUS: 1000,
-            },
-        )
+    campos = {str(k) for k in result["data_schema"].schema}
+    assert campos == {"ubicacion", CONF_INCIDENT_RADIUS}
+
+
+async def test_se_retiran_las_opciones_de_intervalo_antiguas(
+    hass: HomeAssistant, _mock_setup_entry: MagicMock
+) -> None:
+    """Quien venía configurando el intervalo no debe conservar un ajuste muerto."""
+    from custom_components.emasesa import _limpiar_opciones_obsoletas
+
+    entry = _entrada_existente(hass)
+    hass.config_entries.async_update_entry(
+        entry,
+        options={"scan_minutes": 45, "scan_hours": 3, CONF_INCIDENT_RADIUS: 2500},
+    )
+
+    _limpiar_opciones_obsoletas(hass, entry)
+
+    assert dict(entry.options) == {CONF_INCIDENT_RADIUS: 2500}

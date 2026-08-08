@@ -54,7 +54,6 @@
       "init": {
         "title": "Opciones de EMASESA",
         "data": {
-          "scan_minutes": "Intervalo de actualización (minutos, mín. 15)",
           "ubicacion": "Ubicación del suministro"
         },
         "data_description": {

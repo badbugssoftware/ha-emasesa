@@ -26,6 +26,8 @@ from custom_components.emasesa.const import (
     INITIAL_BACKFILL_DAYS,
     LITERS_PER_M3,
     MAX_BACKFILL_DAYS,
+    SCAN_INTERVAL,
+    SCAN_INTERVAL_ESPERA,
     UPDATE_BACKFILL_DAYS,
 )
 from custom_components.emasesa.coordinator import EmasesaCoordinator
@@ -77,6 +79,11 @@ def coordinator() -> EmasesaCoordinator:
     coord.latitude = None
     coord.longitude = None
     coord._last_stat = AsyncMock(return_value=None)
+    # Sondeo adaptativo, tal y como lo deja __init__.
+    coord._intervalo_largo = SCAN_INTERVAL
+    coord._intervalo_corto = SCAN_INTERVAL_ESPERA
+    coord._ultima_fecha_dato = None
+    coord.update_interval = SCAN_INTERVAL
     return coord
 
 
@@ -791,3 +798,72 @@ def test_indice_del_dia(dia, esperado):
     from custom_components.emasesa.coordinator import _indice_del_dia
 
     assert _indice_del_dia(dia) == esperado
+
+
+# --------------------------------------------------------------------------- #
+# Sondeo adaptativo
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def coord_intervalo(coordinator) -> EmasesaCoordinator:
+    """Alias legible: el coordinador ya trae los dos ritmos (6 h / 2 h)."""
+    return coordinator
+
+
+def test_dato_nuevo_espacia_el_sondeo(coord_intervalo):
+    """Ya tenemos el día: no hace falta volver en dos horas."""
+    coord_intervalo.update_interval = timedelta(hours=2)
+    coord_intervalo._ajustar_intervalo("2026-08-05")
+    assert coord_intervalo.update_interval == timedelta(hours=6)
+
+
+def test_sin_novedad_se_vuelve_antes(coord_intervalo):
+    """Misma fecha dos ciclos seguidos: seguimos esperando la publicación."""
+    coord_intervalo._ajustar_intervalo("2026-08-05")
+    assert coord_intervalo.update_interval == timedelta(hours=6)
+
+    coord_intervalo._ajustar_intervalo("2026-08-05")
+    assert coord_intervalo.update_interval == timedelta(hours=2)
+
+
+def test_el_ciclo_sin_fecha_cuenta_como_espera(coord_intervalo):
+    """Si la API no devuelve fecha, no se puede dar por bueno el día."""
+    coord_intervalo._ajustar_intervalo(None)
+    assert coord_intervalo.update_interval == timedelta(hours=2)
+
+
+def test_al_llegar_el_dia_siguiente_se_vuelve_a_espaciar(coord_intervalo):
+    """El ciclo completo: espero, llega el dato, me relajo."""
+    coord_intervalo._ajustar_intervalo("2026-08-05")
+    coord_intervalo._ajustar_intervalo("2026-08-05")
+    assert coord_intervalo.update_interval == timedelta(hours=2)
+
+    coord_intervalo._ajustar_intervalo("2026-08-06")
+    assert coord_intervalo.update_interval == timedelta(hours=6)
+
+
+def test_una_fecha_nula_no_borra_la_ultima_conocida(coord_intervalo):
+    """Un fallo puntual no debe hacer que el día siguiente parezca repetido."""
+    coord_intervalo._ajustar_intervalo("2026-08-05")
+    coord_intervalo._ajustar_intervalo(None)
+    assert coord_intervalo._ultima_fecha_dato == "2026-08-05"
+
+    # Y el mismo día sigue sin ser novedad.
+    coord_intervalo._ajustar_intervalo("2026-08-05")
+    assert coord_intervalo.update_interval == timedelta(hours=2)
+
+
+def test_los_dos_ritmos_de_sondeo():
+    """Los intervalos son fijos y los decide la integración, no el usuario.
+
+    Con 6 h y 2 h salen entre 4 y 12 ciclos al día según haga falta esperar,
+    frente a los 8 fijos de cuando era configurable a 3 h.
+    """
+    assert timedelta(hours=6) == SCAN_INTERVAL
+    assert timedelta(hours=2) == SCAN_INTERVAL_ESPERA
+    assert SCAN_INTERVAL_ESPERA < SCAN_INTERVAL
+
+
+def test_el_coordinator_arranca_con_el_intervalo_largo(coordinator):
+    """Al montar la entrada aún no se sabe si hay dato: se empieza espaciado."""
+    assert coordinator._intervalo_largo == SCAN_INTERVAL
+    assert coordinator.update_interval == SCAN_INTERVAL

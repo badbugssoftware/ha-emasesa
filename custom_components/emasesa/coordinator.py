@@ -36,6 +36,8 @@ from .const import (
     LEAK_NIGHTS,
     LITERS_PER_M3,
     MAX_BACKFILL_DAYS,
+    SCAN_INTERVAL,
+    SCAN_INTERVAL_ESPERA,
     UPDATE_BACKFILL_DAYS,
 )
 
@@ -109,7 +111,6 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         client: EmasesaClient,
         contract_id: str,
-        scan_interval: timedelta,
         incident_radius_m: int = DEFAULT_INCIDENT_RADIUS,
         latitude: float | None = None,
         longitude: float | None = None,
@@ -118,7 +119,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             name=f"{DOMAIN}_{contract_id}",
-            update_interval=scan_interval,
+            update_interval=SCAN_INTERVAL,
         )
         self.client = client
         self.contract_id = str(contract_id)
@@ -133,6 +134,11 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Si un import no produce puntos, la próxima ventana se acorta en vez
         # de reintentar el histórico completo (ver _days_to_backfill).
         self._last_import_empty = False
+
+        # Sondeo adaptativo, ver _ajustar_intervalo.
+        self._intervalo_largo = SCAN_INTERVAL
+        self._intervalo_corto = SCAN_INTERVAL_ESPERA
+        self._ultima_fecha_dato: str | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -223,6 +229,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._safe(self._fetch_nearby_incidents(), "incidencias de red") or {}
         )
         fuga = self._detect_leak(list(days_data.values()))
+        self._ajustar_intervalo(today.get("fecha"))
 
         return {
             "contract_id": self.contract_id,
@@ -272,6 +279,34 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "nbiot": contador.get("nbiot"),
             },
         }
+
+    def _ajustar_intervalo(self, fecha_dato: str | None) -> None:
+        """Espacia el sondeo cuando ya se tiene el dato del día.
+
+        EMASESA publica la telelectura una vez al día y a una hora que varía:
+        medido en una instalación real, un día el dato llevaba 26 h de retraso
+        y otro 12. Con intervalo fijo, o se machaca la API o se llega tarde.
+
+        Así que mientras no llegue nada nuevo se vuelve antes, y en cuanto
+        aparece el día siguiente se espacia. Además cada instalación acaba
+        desfasada según cuándo le llegue su dato, en vez de que todas llamen
+        a la vez.
+        """
+        hay_novedad = fecha_dato is not None and fecha_dato != self._ultima_fecha_dato
+        if fecha_dato is not None:
+            self._ultima_fecha_dato = fecha_dato
+
+        nuevo = self._intervalo_largo if hay_novedad else self._intervalo_corto
+        if nuevo == self.update_interval:
+            return
+        _LOGGER.debug(
+            "Sondeo de %s: %s -> %s (%s)",
+            self.contract_id,
+            self.update_interval,
+            nuevo,
+            "hay dato nuevo" if hay_novedad else "esperando publicación",
+        )
+        self.update_interval = nuevo
 
     async def async_reload_history(self, days: int) -> None:
         """Reimporta el histórico de los últimos `days` días (servicio)."""

@@ -34,18 +34,26 @@ CONF_DEVICE_ID = "id_dispositivo"
 CONF_CONTRACT_ID = "contrato_id"
 CONF_CONTRACT_NUMBER = "contrato_numero"
 CONF_SUPPLY_ADDRESS = "direccion_suministro"
-CONF_SCAN_MINUTES = "scan_minutes"
-# Opción de versiones antiguas, migrada a CONF_SCAN_MINUTES en el arranque.
-LEGACY_CONF_SCAN_HOURS = "scan_hours"
 
-# --- Valores por defecto ---------------------------------------------------
-# La telelectura NB-IoT publica con varias horas de retraso, así que sondear a
-# menudo no adelanta el dato: solo multiplica las peticiones contra una API
-# privada (cada ciclo son ~10 llamadas). Con 3 h son ~8 ciclos al día.
-DEFAULT_SCAN_MINUTES = 180
-MIN_SCAN_MINUTES = 30
-MAX_SCAN_MINUTES = 1440
-DEFAULT_SCAN_INTERVAL = timedelta(minutes=DEFAULT_SCAN_MINUTES)
+# Opciones de versiones anteriores. El intervalo de sondeo dejó de ser
+# configurable: lo decide la integración, que sabe cómo publica EMASESA mucho
+# mejor de lo que puede saberlo quien la instala. Se listan para poder
+# limpiarlas de las entradas existentes y no dejar ajustes que ya no hacen
+# nada pero parecen hacerlo.
+OPCIONES_OBSOLETAS = ("scan_minutes", "scan_hours")
+
+# --- Ritmo de sondeo -------------------------------------------------------
+# La telelectura NB-IoT publica UNA VEZ AL DÍA y a una hora que varía: medido
+# en una instalación real, un día el dato llevaba 26 h de retraso y otro 12.
+# Sondear a menudo no lo adelanta, sólo multiplica las peticiones contra una
+# API privada (cada ciclo son ~10 llamadas).
+#
+# De ahí los dos ritmos: se espacia cuando ya se tiene el dato del día y se
+# vuelve antes mientras se espera la publicación. Como cada instalación
+# recibe su dato en un momento distinto, además acaban desfasadas solas y no
+# llaman todas a la vez.
+SCAN_INTERVAL = timedelta(hours=6)
+SCAN_INTERVAL_ESPERA = timedelta(hours=2)
 
 # Días de histórico horario a importar en el primer arranque (backfill).
 INITIAL_BACKFILL_DAYS = 60

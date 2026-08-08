@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 import voluptuous as vol
@@ -33,15 +33,11 @@ from .const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_PASSWORD,
-    CONF_SCAN_MINUTES,
     CONF_USERNAME,
     DEFAULT_INCIDENT_RADIUS,
-    DEFAULT_SCAN_MINUTES,
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
-    LEGACY_CONF_SCAN_HOURS,
-    MAX_SCAN_MINUTES,
-    MIN_SCAN_MINUTES,
+    OPCIONES_OBSOLETAS,
     PLATFORMS,
 )
 from .coordinator import EmasesaCoordinator
@@ -51,33 +47,26 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @callback
-def _migrate_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Convierte opciones de versiones anteriores.
+def _limpiar_opciones_obsoletas(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Retira ajustes de versiones anteriores que ya no hacen nada.
 
-    'scan_hours' (horas) se sustituyó por 'scan_minutes'. Sin esta migración
-    el ajuste del usuario quedaba huérfano y se aplicaba el valor por defecto.
+    El intervalo de sondeo dejó de ser configurable. Dejar el valor guardado
+    en la entrada sería peor que borrarlo: seguiría apareciendo en el volcado
+    de diagnóstico como si significase algo.
     """
-    options = dict(entry.options)
-    legacy = options.pop(LEGACY_CONF_SCAN_HOURS, None)
-    if legacy is None:
+    options = {k: v for k, v in entry.options.items() if k not in OPCIONES_OBSOLETAS}
+    if options == dict(entry.options):
         return
-    if CONF_SCAN_MINUTES not in options:
-        options[CONF_SCAN_MINUTES] = max(
-            MIN_SCAN_MINUTES, min(int(legacy) * 60, MAX_SCAN_MINUTES)
-        )
     _LOGGER.debug(
-        "Migrada la opción %s=%s a %s=%s",
-        LEGACY_CONF_SCAN_HOURS,
-        legacy,
-        CONF_SCAN_MINUTES,
-        options.get(CONF_SCAN_MINUTES),
+        "Retiradas opciones que ya no se usan: %s",
+        sorted(set(entry.options) - set(options)),
     )
     hass.config_entries.async_update_entry(entry, options=options)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configura una entrada (un contrato de EMASESA)."""
-    _migrate_options(hass, entry)
+    _limpiar_opciones_obsoletas(hass, entry)
     client = EmasesaClient(
         async_get_clientsession(hass),
         entry.data[CONF_USERNAME],
@@ -85,12 +74,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_DEVICE_ID],
     )
 
-    scan_minutes = entry.options.get(CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES)
     coordinator = EmasesaCoordinator(
         hass,
         client,
         entry.data[CONF_CONTRACT_ID],
-        timedelta(minutes=scan_minutes),
         entry.options.get(CONF_INCIDENT_RADIUS, DEFAULT_INCIDENT_RADIUS),
         entry.options.get(CONF_LATITUDE),
         entry.options.get(CONF_LONGITUDE),

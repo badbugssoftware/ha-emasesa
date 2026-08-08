@@ -33,16 +33,12 @@ from .const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_PASSWORD,
-    CONF_SCAN_MINUTES,
     CONF_SUPPLY_ADDRESS,
     CONF_USERNAME,
     DEFAULT_INCIDENT_RADIUS,
-    DEFAULT_SCAN_MINUTES,
     DOMAIN,
     MAX_INCIDENT_RADIUS,
-    MAX_SCAN_MINUTES,
     MIN_INCIDENT_RADIUS,
-    MIN_SCAN_MINUTES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -327,7 +323,14 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class EmasesaOptionsFlow(OptionsFlow):
-    """Intervalo de sondeo, radio de incidencias y ubicación del suministro."""
+    """Ubicación del suministro y radio de incidencias.
+
+    El intervalo de sondeo NO se ofrece a propósito: lo decide la integración,
+    que se espacia cuando ya tiene el dato del día y se acelera mientras lo
+    espera. Un número puesto a mano no puede hacer eso, y el único ajuste
+    posible era peor para todos: bajarlo no adelanta el dato —EMASESA publica
+    una vez al día— y sólo multiplica las llamadas a una API privada.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -341,7 +344,6 @@ class EmasesaOptionsFlow(OptionsFlow):
                 datos[CONF_LONGITUDE] = ubicacion.get("longitude")
             return self.async_create_entry(title="", data=datos)
 
-        current = self.config_entry.options.get(CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES)
         radius = self.config_entry.options.get(
             CONF_INCIDENT_RADIUS, DEFAULT_INCIDENT_RADIUS
         )
@@ -358,10 +360,6 @@ class EmasesaOptionsFlow(OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_SCAN_MINUTES, default=current): vol.All(
-                        vol.Coerce(int),
-                        vol.Range(min=MIN_SCAN_MINUTES, max=MAX_SCAN_MINUTES),
-                    ),
                     vol.Optional("ubicacion", default=ubicacion): LocationSelector(),
                     vol.Required(CONF_INCIDENT_RADIUS, default=radius): vol.All(
                         vol.Coerce(int),

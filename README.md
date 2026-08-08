@@ -317,13 +317,29 @@ En la tarjeta de la integración, **Configurar**:
 
 | Opción | Clave | Por defecto | Rango |
 | --- | --- | --- | --- |
-| Intervalo de actualización (minutos) | `scan_minutes` | `45` | `15` – `1440` |
+| Ubicación del suministro | `latitude` / `longitude` | La de Home Assistant | – |
 | Radio de incidencias cercanas (metros) | `incident_radius_m` | `1000` | `100` – `20000` |
 
-> [!TIP]
-> No bajes el intervalo. El dato de telelectura se consolida como mucho cada hora y,
-> encima, llega con **1–2 días de retraso**: sondear cada pocos minutos no te dará datos
-> más frescos, solo carga innecesaria sobre la API de EMASESA.
+### El intervalo de sondeo no se configura
+
+Y es a propósito. **Se adapta solo:**
+
+| Situación | Vuelve a mirar en |
+| --- | --- |
+| Ya tiene el dato del día | **6 horas** |
+| Esperando la publicación | **2 horas** |
+
+EMASESA publica la telelectura **una vez al día y a una hora que varía**: medido en una
+instalación real, un día el dato llevaba 26 h de retraso y otro 12. Con un intervalo fijo
+o machacas la API o llegas tarde, y un número puesto a mano no puede distinguir las dos
+situaciones.
+
+Bajarlo tampoco serviría de nada: el dato no llega antes por mirar más veces, y cada
+ciclo son unas diez llamadas a una API privada. Como cada instalación recibe su dato en
+un momento distinto, además acaban desfasadas solas en lugar de llamar todas a la vez.
+
+> Si vienes de una versión anterior, el ajuste `scan_minutes` que tuvieras guardado se
+> retira solo al arrancar.
 
 ## Panel de Energía
 
@@ -434,6 +450,25 @@ en una incidencia.
   sensores.
 - 🔐 Tus credenciales se guardan en el almacén de configuración de Home Assistant, como en
   cualquier otra integración, y solo se envían a EMASESA.
+
+### Sin telelectura NB-IoT
+
+EMASESA lleva telegestionado en torno al **80 % del parque de contadores**, pero si el
+tuyo todavía no lo está, la API no publica consumo hora a hora para tu contrato.
+
+Con un contador sin telelectura, esto es lo que tienes:
+
+| | |
+| --- | --- |
+| ✅ **Sigue funcionando** | Lectura del contador, facturas, importe pendiente, coste del periodo, consumo medio, embalses e incidencias de red |
+| ❌ **No funciona** | El histórico horario del panel de Energía y la detección de fugas nocturnas, que necesitan datos hora a hora |
+
+No hay nada que arreglar del lado de Home Assistant: depende del contador que tengas
+instalado. El día que EMASESA empiece a publicar datos horarios de tu suministro,
+empezarán a aparecer solos.
+
+Puedes comprobar tu caso en el atributo `telelectura_nbiot` del sensor
+*Índice del contador*.
 
 ## Ejemplos de automatización
 
@@ -615,9 +650,10 @@ vuelve a pedir:
 <details>
 <summary><b>No aparece consumo horario o los sensores están vacíos</b></summary>
 
-Lo más probable es que **tu contador no tenga telelectura NB-IoT**. Compruébalo en el
-atributo `telelectura_nbiot` del sensor *Índice del contador*: si no es afirmativo, EMASESA
-no publica detalle horario para ese contrato y solo tendrás lo que dé la lectura periódica.
+Lo más probable es que **tu contador no tenga telelectura NB-IoT**; tienes los detalles
+en [Sin telelectura NB-IoT](#sin-telelectura-nb-iot). Compruébalo en el atributo
+`telelectura_nbiot` del sensor *Índice del contador*: si no es afirmativo, EMASESA no
+publica detalle horario para ese contrato y solo tendrás lo que dé la lectura periódica.
 
 También puede ser simplemente el **retraso de 1–2 días** de la telelectura, sobre todo si
 acabas de instalar la integración o si el contador lleva poco tiempo telegestionado.
