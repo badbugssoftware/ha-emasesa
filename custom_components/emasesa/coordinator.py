@@ -234,7 +234,22 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("[EMASESA] no se pudo estimar el coste: %s", err)
 
         # Importa las estadísticas (consumo + coste) ya con el precio €/m³.
-        await self._import_statistics(list(days_data.values()), precio_m3)
+        #
+        # Blindado a propósito: escribir en el recorder no puede tumbar la
+        # actualización entera. Si Home Assistant cambia lo que exige de los
+        # metadatos —ya pasó con `mean_type` y vuelve a pasar con
+        # `unit_class`—, sin esto la excepción subiría hasta el coordinator y
+        # dejaría en "no disponible" TODAS las entidades: el contador, las
+        # facturas, los embalses. Y esos datos siguen siendo válidos aunque el
+        # histórico del panel de Energía no se pueda escribir.
+        try:
+            await self._import_statistics(list(days_data.values()), precio_m3)
+        except Exception:
+            _LOGGER.exception(
+                "No se pudieron importar las estadísticas del contrato %s; "
+                "los sensores siguen actualizándose con normalidad",
+                self.contract_id,
+            )
 
         # --- Extras (no críticos: si fallan, la integración sigue) ----------
         factura = await self._safe(self._fetch_last_invoice(), "facturas") or {}

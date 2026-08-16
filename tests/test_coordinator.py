@@ -925,3 +925,37 @@ def test_los_metadatos_se_adaptan_a_la_version_de_home_assistant():
     else:
         assert meta["has_mean"] is False
     assert ("unit_class" in meta) is _SOPORTA_UNIT_CLASS
+
+
+@pytest.mark.asyncio
+async def test_un_fallo_del_recorder_no_tumba_la_actualizacion(
+    coordinator, monkeypatch, sample_day, caplog
+):
+    """Escribir estadísticas no puede dejar sin datos al resto de sensores.
+
+    Home Assistant ya cambió una vez lo que exige en los metadatos
+    (`mean_type`) y volverá a hacerlo en 2026.11 (`unit_class`). Sin esta red,
+    esa excepción subiría hasta el coordinator y dejaría en "no disponible"
+    el contador, las facturas y los embalses, que no tienen culpa de nada.
+    """
+
+    def _revienta(hass, metadata, stats):
+        raise KeyError("unit_class")
+
+    monkeypatch.setattr(coordinator_module, "async_add_external_statistics", _revienta)
+
+    # Todo lo que consulta a la API, en blanco: sólo interesa que no propague.
+    coordinator.client.get_latest_consumption = AsyncMock(return_value=sample_day)
+    coordinator.client.get_meter_info = AsyncMock(return_value={})
+    coordinator.client.get_consumption = AsyncMock(return_value=[sample_day])
+    coordinator.client.get_consumption_valuation = AsyncMock(return_value={})
+    coordinator.client.get_invoices = AsyncMock(return_value=[])
+    coordinator.client.get_reservoirs = AsyncMock(return_value={})
+    coordinator.client.get_network_actions = AsyncMock(return_value=[])
+
+    datos = await coordinator._async_update_data()
+
+    # La actualización termina y los sensores conservan su valor.
+    assert datos["contract_id"] == CONTRACT_ID
+    assert datos["total_m3"] == pytest.approx(443.601)
+    assert "No se pudieron importar las estadísticas" in caplog.text
