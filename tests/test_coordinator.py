@@ -867,3 +867,61 @@ def test_el_coordinator_arranca_con_el_intervalo_largo(coordinator):
     """Al montar la entrada aún no se sabe si hay dato: se empieza espaciado."""
     assert coordinator._intervalo_largo == SCAN_INTERVAL
     assert coordinator.update_interval == SCAN_INTERVAL
+
+
+# --------------------------------------------------------------------------- #
+# Metadatos de las estadísticas: campos que cambian según la versión de HA
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_la_estadistica_de_consumo_declara_su_clase_de_unidad(
+    coordinator, stats_calls, sample_day
+):
+    """Sin `unit_class`, Home Assistant 2026.11 rechazará las estadísticas.
+
+    Hasta entonces sólo avisa en el registro, y el aviso pide al usuario que
+    abra una incidencia en nuestro repositorio.
+    """
+    from custom_components.emasesa.coordinator import _SOPORTA_UNIT_CLASS
+
+    await coordinator._import_statistics([sample_day], PRECIO_ALTO)
+
+    metadata, _ = stats_calls[0]
+    if _SOPORTA_UNIT_CLASS:
+        # El consumo va en m³ y es convertible a otras unidades de volumen.
+        assert metadata["unit_class"] == "volume"
+        assert metadata["unit_of_measurement"] == "m³"
+    else:
+        assert "unit_class" not in metadata
+
+
+@pytest.mark.asyncio
+async def test_la_estadistica_de_coste_no_declara_clase_de_unidad(
+    coordinator, stats_calls, sample_day
+):
+    """El dinero no se convierte de unidad, así que su clase es nula."""
+    from custom_components.emasesa.coordinator import _SOPORTA_UNIT_CLASS
+
+    await coordinator._import_statistics([sample_day], PRECIO_ALTO)
+
+    coste = next(m for m, _ in stats_calls if m["statistic_id"].endswith("_cost"))
+    assert coste["unit_of_measurement"] == "EUR"
+    if _SOPORTA_UNIT_CLASS:
+        assert coste["unit_class"] is None
+
+
+def test_los_metadatos_se_adaptan_a_la_version_de_home_assistant():
+    """Ni `mean_type` ni `unit_class` existen en todas las versiones."""
+    from custom_components.emasesa.coordinator import (
+        _MEAN_TYPE_NONE,
+        _SOPORTA_UNIT_CLASS,
+    )
+
+    meta: dict = {}
+    EmasesaCoordinator._completar_metadata(meta, "volume")
+
+    if _MEAN_TYPE_NONE is not None:
+        assert meta["mean_type"] == _MEAN_TYPE_NONE
+        assert "has_mean" not in meta
+    else:
+        assert meta["has_mean"] is False
+    assert ("unit_class" in meta) is _SOPORTA_UNIT_CLASS

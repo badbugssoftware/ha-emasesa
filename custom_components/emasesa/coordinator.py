@@ -58,6 +58,20 @@ try:
 except ImportError:  # pragma: no cover
     _MEAN_TYPE_NONE = None
 
+# HA 2026.x añade `unit_class` a StatisticMetaData: dice con qué conversor se
+# puede cambiar de unidad la serie. Sin él, Home Assistant avisa en el registro
+# y a partir de 2026.11 dejará de aceptar las estadísticas.
+#
+# Se detecta en vez de darlo por hecho, para no romper en versiones anteriores
+# donde ese campo no existe.
+_SOPORTA_UNIT_CLASS = "unit_class" in getattr(StatisticMetaData, "__annotations__", {})
+try:
+    from homeassistant.util.unit_conversion import VolumeConverter
+
+    _UNIT_CLASS_VOLUMEN: str | None = VolumeConverter.UNIT_CLASS
+except (ImportError, AttributeError):  # pragma: no cover
+    _UNIT_CLASS_VOLUMEN = None
+
 
 def _indice_del_dia(dia: dict[str, Any]) -> float | None:
     """Lectura del contador de un día: la de cierre o la de su última hora.
@@ -543,12 +557,22 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return max(UPDATE_BACKFILL_DAYS, min(gap, MAX_BACKFILL_DAYS))
 
     @staticmethod
-    def _apply_mean_type(meta: StatisticMetaData) -> None:
-        """has_mean/mean_type según versión de HA (evita el deprecation warning)."""
+    def _completar_metadata(
+        meta: StatisticMetaData, unit_class: str | None = None
+    ) -> None:
+        """Rellena los campos que cambian de una versión de HA a otra.
+
+        Ninguno de los dos se puede poner a secas: `mean_type` no existe antes
+        de 2025.11 y `unit_class` no existe antes de 2026, así que se detecta
+        qué acepta la versión instalada. Sin `unit_class`, Home Assistant avisa
+        en el registro y a partir de 2026.11 rechaza las estadísticas.
+        """
         if _MEAN_TYPE_NONE is not None:
             meta["mean_type"] = _MEAN_TYPE_NONE
         else:
             meta["has_mean"] = False
+        if _SOPORTA_UNIT_CLASS:
+            meta["unit_class"] = unit_class
 
     async def _import_statistics(
         self, days: list[dict[str, Any]], precio_eur_m3: float | None = None
@@ -689,7 +713,7 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             statistic_id=self.statistic_id,
             unit_of_measurement=UnitOfVolume.CUBIC_METERS,
         )
-        self._apply_mean_type(metadata)
+        self._completar_metadata(metadata, _UNIT_CLASS_VOLUMEN)
         async_add_external_statistics(self.hass, metadata, stats)
 
         if cost_stats:
@@ -700,7 +724,8 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 statistic_id=self.cost_statistic_id,
                 unit_of_measurement="EUR",
             )
-            self._apply_mean_type(cost_meta)
+            # El dinero no se convierte de unidad: sin clase.
+            self._completar_metadata(cost_meta, None)
             async_add_external_statistics(self.hass, cost_meta, cost_stats)
 
         _LOGGER.debug(
