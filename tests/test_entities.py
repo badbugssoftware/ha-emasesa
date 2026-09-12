@@ -355,13 +355,17 @@ async def test_no_hay_subdispositivo_de_embalses(hass: HomeAssistant) -> None:
     bien lo de la ciudad de lo del usuario, pero a cambio metía un dispositivo
     de más en la lista para seis sensores que casi nadie mira.
     """
-    await setup_integration(hass)
+    entry = await setup_integration(hass)
     registro = dr.async_get(hass)
 
-    contrato = registro.async_get_device(identifiers={(DOMAIN, CONTRACT_ID)})
+    contrato = registro.async_get_device_by_identifier(
+        (DOMAIN, CONTRACT_ID), entry.entry_id
+    )
     assert contrato is not None
     assert (
-        registro.async_get_device(identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")})
+        registro.async_get_device_by_identifier(
+            (DOMAIN, f"{CONTRACT_ID}_embalses"), entry.entry_id
+        )
         is None
     )
 
@@ -409,8 +413,8 @@ async def test_se_retira_el_subdispositivo_de_versiones_anteriores(
         await hass.async_block_till_done()
 
     assert (
-        dr.async_get(hass).async_get_device(
-            identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")}
+        dr.async_get(hass).async_get_device_by_identifier(
+            (DOMAIN, f"{CONTRACT_ID}_embalses"), entry.entry_id
         )
         is None
     )
@@ -453,8 +457,8 @@ async def test_no_se_retira_el_subdispositivo_si_le_quedan_entidades(
         await hass.async_block_till_done()
 
     assert (
-        dr.async_get(hass).async_get_device(
-            identifiers={(DOMAIN, f"{CONTRACT_ID}_embalses")}
+        dr.async_get(hass).async_get_device_by_identifier(
+            (DOMAIN, f"{CONTRACT_ID}_embalses"), entry.entry_id
         )
         is not None
     )

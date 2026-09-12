@@ -396,3 +396,29 @@ def sample_day() -> dict[str, Any]:
 @pytest.fixture
 def sample_days() -> list[dict[str, Any]]:
     return [day_2026_07_30(), day_2026_07_31()]
+
+
+@pytest.fixture(autouse=True)
+def _sin_avisos_de_uso_obsoleto(caplog: pytest.LogCaptureFixture):
+    """Hace fallar el test si Home Assistant avisa de que usamos algo obsoleto.
+
+    Esos avisos no rompen nada: sólo escriben una línea en el registro. Por eso
+    la batería pasaba en verde con la integración a meses de dejar de funcionar,
+    y ya ha ocurrido dos veces —`unit_class` (rompía en 2026.11) y
+    `device_registry.async_get_device` (rompe en 2027.8)—, las dos descubiertas
+    leyendo a mano el registro de una instalación real.
+
+    Ojo: después del `yield` se está en la fase de desmontaje, donde
+    `caplog.records` sólo devuelve los registros de ESA fase. La primera versión
+    de este guardián lo usaba así y no cazaba nada; hay que pedir las fases de
+    preparación y ejecución explícitamente.
+    """
+    yield
+    avisos = [
+        registro.getMessage()
+        for fase in ("setup", "call")
+        for registro in caplog.get_records(fase)
+        if registro.name == "homeassistant.helpers.frame"
+        and "custom integration 'emasesa'" in registro.getMessage()
+    ]
+    assert not avisos, "Home Assistant avisa de uso obsoleto:\n" + "\n".join(avisos)

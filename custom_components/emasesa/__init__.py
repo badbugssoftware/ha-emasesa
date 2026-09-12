@@ -106,9 +106,17 @@ def _retirar_dispositivo_de_embalses(
     que llevarse por delante el histórico de alguien.
     """
     registro = dr.async_get(hass)
-    dispositivo = registro.async_get_device(
-        identifiers={(DOMAIN, f"{coordinator.contract_id}{LEGACY_RESERVOIR_DEVICE}")}
-    )
+    identificador = (DOMAIN, f"{coordinator.contract_id}{LEGACY_RESERVOIR_DEVICE}")
+    # `async_get_device` avisa desde Home Assistant 2026.9 y deja de funcionar en
+    # la 2027.8: los identificadores ya no son únicos entre entradas. Su
+    # sustituta busca dentro de la entrada —justo lo que queremos, porque el
+    # sub-dispositivo era suyo—, pero no existe en versiones antiguas.
+    if hasattr(registro, "async_get_device_by_identifier"):
+        dispositivo = registro.async_get_device_by_identifier(
+            identificador, entry.entry_id
+        )
+    else:  # pragma: no cover - Home Assistant sin la API nueva
+        dispositivo = registro.async_get_device(identifiers={identificador})
     if dispositivo is None:
         return
     if er.async_entries_for_device(

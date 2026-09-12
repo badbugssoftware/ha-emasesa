@@ -6,6 +6,11 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Cada lunes, contra la última versión de Home Assistant. Lo que rompe la
+    # integración suele llegar sin que nadie toque el repositorio: un cambio de
+    # Home Assistant que antes sólo avisaba en el registro.
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
