@@ -52,8 +52,14 @@ OPCIONES_OBSOLETAS = ("scan_minutes", "scan_hours")
 # vuelve antes mientras se espera la publicación. Como cada instalación
 # recibe su dato en un momento distinto, además acaban desfasadas solas y no
 # llaman todas a la vez.
-SCAN_INTERVAL = timedelta(hours=6)
-SCAN_INTERVAL_ESPERA = timedelta(hours=2)
+#
+# 8 h / 3 h salen unos 6 ciclos al día. Con 6 h / 2 h (hasta la 0.7.2) eran
+# unos 10: el dato llega una vez al día, así que casi todo el tiempo se está
+# esperando y es el intervalo corto el que marca el ritmo. Mirar cada 2 h en
+# vez de cada 3 sólo adelantaba el dato media hora de media, cuando EMASESA ya
+# lo publica con entre 7 y 26 h de retraso.
+SCAN_INTERVAL = timedelta(hours=8)
+SCAN_INTERVAL_ESPERA = timedelta(hours=3)
 
 # Días de histórico horario a importar en el primer arranque (backfill).
 INITIAL_BACKFILL_DAYS = 60

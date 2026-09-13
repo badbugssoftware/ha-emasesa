@@ -79,7 +79,7 @@ incluido el **coste en euros** calculado con el **simulador oficial de tarifas**
 
 ```mermaid
 flowchart LR
-    A["API privada<br/>Mi Emasesa"] --> B["Coordinator<br/>(6 h / 2 h si espera dato)"]
+    A["API privada<br/>Mi Emasesa"] --> B["Coordinator<br/>(8 h / 3 h si espera dato)"]
     B --> C["9 sensores + 1 por embalse<br/>+ 4 binary_sensors"]
     B --> D["Estadísticas externas<br/>emasesa:…_water<br/>emasesa:…_water_cost"]
     D --> E["Panel de Energía<br/>(agua + coste)"]
@@ -326,8 +326,8 @@ Y es a propósito. **Se adapta solo:**
 
 | Situación | Vuelve a mirar en |
 | --- | --- |
-| Ya tiene el dato del día | **6 horas** |
-| Esperando la publicación | **2 horas** |
+| Ya tiene el dato del día | **8 horas** |
+| Esperando la publicación | **3 horas** |
 
 EMASESA publica la telelectura **una vez al día y a una hora que varía**: medido en una
 instalación real, un día el dato llevaba 26 h de retraso y otro 12. Con un intervalo fijo

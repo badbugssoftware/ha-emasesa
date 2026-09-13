@@ -805,40 +805,40 @@ def test_indice_del_dia(dia, esperado):
 # --------------------------------------------------------------------------- #
 @pytest.fixture
 def coord_intervalo(coordinator) -> EmasesaCoordinator:
-    """Alias legible: el coordinador ya trae los dos ritmos (6 h / 2 h)."""
+    """Alias legible: el coordinador ya trae los dos ritmos (largo / espera)."""
     return coordinator
 
 
 def test_dato_nuevo_espacia_el_sondeo(coord_intervalo):
     """Ya tenemos el día: no hace falta volver en dos horas."""
-    coord_intervalo.update_interval = timedelta(hours=2)
+    coord_intervalo.update_interval = SCAN_INTERVAL_ESPERA
     coord_intervalo._ajustar_intervalo("2026-08-05")
-    assert coord_intervalo.update_interval == timedelta(hours=6)
+    assert coord_intervalo.update_interval == SCAN_INTERVAL
 
 
 def test_sin_novedad_se_vuelve_antes(coord_intervalo):
     """Misma fecha dos ciclos seguidos: seguimos esperando la publicación."""
     coord_intervalo._ajustar_intervalo("2026-08-05")
-    assert coord_intervalo.update_interval == timedelta(hours=6)
+    assert coord_intervalo.update_interval == SCAN_INTERVAL
 
     coord_intervalo._ajustar_intervalo("2026-08-05")
-    assert coord_intervalo.update_interval == timedelta(hours=2)
+    assert coord_intervalo.update_interval == SCAN_INTERVAL_ESPERA
 
 
 def test_el_ciclo_sin_fecha_cuenta_como_espera(coord_intervalo):
     """Si la API no devuelve fecha, no se puede dar por bueno el día."""
     coord_intervalo._ajustar_intervalo(None)
-    assert coord_intervalo.update_interval == timedelta(hours=2)
+    assert coord_intervalo.update_interval == SCAN_INTERVAL_ESPERA
 
 
 def test_al_llegar_el_dia_siguiente_se_vuelve_a_espaciar(coord_intervalo):
     """El ciclo completo: espero, llega el dato, me relajo."""
     coord_intervalo._ajustar_intervalo("2026-08-05")
     coord_intervalo._ajustar_intervalo("2026-08-05")
-    assert coord_intervalo.update_interval == timedelta(hours=2)
+    assert coord_intervalo.update_interval == SCAN_INTERVAL_ESPERA
 
     coord_intervalo._ajustar_intervalo("2026-08-06")
-    assert coord_intervalo.update_interval == timedelta(hours=6)
+    assert coord_intervalo.update_interval == SCAN_INTERVAL
 
 
 def test_una_fecha_nula_no_borra_la_ultima_conocida(coord_intervalo):
@@ -849,17 +849,17 @@ def test_una_fecha_nula_no_borra_la_ultima_conocida(coord_intervalo):
 
     # Y el mismo día sigue sin ser novedad.
     coord_intervalo._ajustar_intervalo("2026-08-05")
-    assert coord_intervalo.update_interval == timedelta(hours=2)
+    assert coord_intervalo.update_interval == SCAN_INTERVAL_ESPERA
 
 
 def test_los_dos_ritmos_de_sondeo():
     """Los intervalos son fijos y los decide la integración, no el usuario.
 
-    Con 6 h y 2 h salen entre 4 y 12 ciclos al día según haga falta esperar,
-    frente a los 8 fijos de cuando era configurable a 3 h.
+    Con 8 h y 3 h salen entre 3 y 8 ciclos al día según haga falta esperar;
+    unos 6 en la práctica, frente a los ~10 de 6 h / 2 h.
     """
-    assert timedelta(hours=6) == SCAN_INTERVAL
-    assert timedelta(hours=2) == SCAN_INTERVAL_ESPERA
+    assert timedelta(hours=8) == SCAN_INTERVAL
+    assert timedelta(hours=3) == SCAN_INTERVAL_ESPERA
     assert SCAN_INTERVAL_ESPERA < SCAN_INTERVAL
 
 
