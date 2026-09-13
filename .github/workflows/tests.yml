@@ -20,7 +20,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DEFAULT_PYTHON: "3.13"
+  # Tiene que ser la que exige la última versión de Home Assistant. Con una más
+  # antigua pip no avisa: retrocede hasta la última versión de Home Assistant
+  # que aún la aceptaba y los tests pasan contra un Home Assistant de meses
+  # atrás. Con 3.13 se estuvo probando contra la 2026.2.3 en plena 2026.9.
+  DEFAULT_PYTHON: "3.14"
 
 jobs:
   pytest:

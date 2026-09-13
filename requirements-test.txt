@@ -9,5 +9,9 @@
 # así que fija de facto la versión de HA contra la que se prueba.
 pytest
 pytest-asyncio
-pytest-homeassistant-custom-component
+# Con suelo a propósito: sin él, si la versión de Python de la CI se queda
+# atrás, pip retrocede en silencio a un Home Assistant de meses atrás (pasó:
+# 2026.2.3 en plena 2026.9) y los tests pasan contra algo que ya nadie usa.
+# Con el suelo, la instalación falla a la vista. Súbelo cuando haga falta.
+pytest-homeassistant-custom-component>=0.13.365
 aioresponses
