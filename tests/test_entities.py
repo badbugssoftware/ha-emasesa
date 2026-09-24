@@ -577,3 +577,72 @@ async def test_descarga_de_la_entrada(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert entry.entry_id not in hass.data.get(DOMAIN, {})
+
+
+# --------------------------------------------------------------------------- #
+# Diagnóstico
+# --------------------------------------------------------------------------- #
+async def test_el_diagnostico_no_lleva_datos_personales(hass: HomeAssistant) -> None:
+    """El volcado de diagnóstico es lo que se adjunta a una incidencia pública.
+
+    Hasta la 0.7.3 se colaban el número de contrato (en el título de la
+    entrada, en sus datos y en los identificadores de las estadísticas), las
+    coordenadas de la casa (en las opciones) y el número de serie del contador.
+    """
+    import json
+
+    from custom_components.emasesa.const import (
+        CONF_INCIDENT_RADIUS,
+        CONF_LATITUDE,
+        CONF_LONGITUDE,
+        CONF_SUPPLY_ADDRESS,
+    )
+    from custom_components.emasesa.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=CONTRACT_ID,
+        title="EMASESA 0012345678",
+        data={
+            CONF_USERNAME: USERNAME,
+            CONF_PASSWORD: PASSWORD,
+            CONF_DEVICE_ID: "dispositivo-1",
+            CONF_CONTRACT_ID: CONTRACT_ID,
+            CONF_CONTRACT_NUMBER: "0012345678",
+            CONF_SUPPLY_ADDRESS: "C/ EJEMPLO 1 ES:1 PL:03 PT:B",
+        },
+        options={
+            CONF_LATITUDE: 37.3891,
+            CONF_LONGITUDE: -5.9845,
+            CONF_INCIDENT_RADIUS: 1500,
+        },
+    )
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
+        return_value=DATOS,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    volcado = json.dumps(await async_get_config_entry_diagnostics(hass, entry))
+
+    for dato in (
+        "0012345678",  # número de contrato
+        CONTRACT_ID,  # id interno del contrato
+        USERNAME,
+        PASSWORD,
+        "dispositivo-1",
+        "C/ EJEMPLO",  # dirección del suministro
+        "37.3891",  # coordenadas de la casa
+        "-5.9845",
+        "20345678",  # número de serie del contador
+    ):
+        assert dato not in volcado, f"el diagnóstico filtra {dato!r}"
+
+    # Y sigue sirviendo para diagnosticar.
+    assert '"incident_radius_m": 1500' in volcado
+    assert '"total_m3": 443.601' in volcado
+    assert "_water" in volcado

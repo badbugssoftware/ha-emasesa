@@ -482,46 +482,56 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Posible fuga: consumo continuo en TODAS las horas de madrugada.
 
         Un hogar normal tiene al menos una hora sin consumo entre las 02:00 y
-        las 05:00. Si durante varios días seguidos no hay ninguna hora a cero,
-        suele indicar un goteo permanente (cisterna, grifo, tubería).
-        """
-        completos = [
-            d
-            for d in days
-            if isinstance(d.get("detalle"), list) and len(d["detalle"]) >= 24
-        ]
-        completos.sort(key=lambda d: d.get("fecha", ""))
-        recientes = completos[-LEAK_NIGHTS:]
-        # Sin noches completas no se puede afirmar que NO haya fuga: el sensor
-        # se queda en "desconocido" en vez de decir que todo va bien.
-        sin_analizar = {
-            "detectada": None,
-            "analizado": False,
-            "noches": 0,
-            "min_l_h": None,
-        }
-        if len(recientes) < LEAK_NIGHTS:
-            return sin_analizar
+        las 05:00. Si en las últimas noches no hay ninguna hora a cero, suele
+        indicar un goteo permanente (cisterna, grifo, tubería).
 
-        minimos: list[float] = []
-        for day in recientes:
+        Sólo cuentan las noches con TODAS sus horas publicadas. La API manda el
+        día en curso con sus 24 horas, y las que aún no ha publicado llegan con
+        `indice: None` y `consumo: 0`: leídas tal cual, una noche sin publicar
+        parecía una noche sin gastar agua, y de madrugada bastaba eso para
+        apagar la alarma con un goteo en marcha. Con el retraso de EMASESA
+        (7 a 26 h) pasaba todos los días.
+        """
+        noches: list[tuple[str, list[float]]] = []
+        for day in sorted(days, key=lambda d: d.get("fecha", "")):
+            detalle = day.get("detalle")
+            if not day.get("fecha") or not isinstance(detalle, list):
+                continue
             franja = [
-                float(h.get("consumo") or 0)
-                for h in day["detalle"]
-                if str(h.get("hora", "")).isdigit()
+                h
+                for h in detalle
+                if isinstance(h, dict)
+                and str(h.get("hora", "")).isdigit()
                 and LEAK_HOUR_START <= int(h["hora"]) <= LEAK_HOUR_END
             ]
-            if not franja:
-                return sin_analizar
-            minimos.append(min(franja))
+            publicada = bool(franja) and all(
+                isinstance(h.get("indice"), (int, float)) for h in franja
+            )
+            if publicada:
+                noches.append(
+                    (day["fecha"], [float(h.get("consumo") or 0) for h in franja])
+                )
 
+        recientes = noches[-LEAK_NIGHTS:]
+        if len(recientes) < LEAK_NIGHTS:
+            # Sin suficientes noches publicadas no se puede afirmar que NO haya
+            # fuga: el sensor se queda en "desconocido" en vez de decir que
+            # todo va bien.
+            return {
+                "detectada": None,
+                "analizado": False,
+                "noches": len(recientes),
+                "min_l_h": None,
+            }
+
+        minimos = [min(consumos) for _, consumos in recientes]
         detectada = all(m >= LEAK_MIN_LITERS for m in minimos)
         return {
             "detectada": detectada,
             "analizado": True,
             "noches": len(minimos),
-            "min_l_h": min(minimos) if minimos else None,
-            "desde": recientes[0].get("fecha") if detectada else None,
+            "min_l_h": min(minimos),
+            "desde": recientes[0][0] if detectada else None,
         }
 
     async def _fetch_history_chunked(

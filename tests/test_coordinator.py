@@ -959,3 +959,82 @@ async def test_un_fallo_del_recorder_no_tumba_la_actualizacion(
     assert datos["contract_id"] == CONTRACT_ID
     assert datos["total_m3"] == pytest.approx(443.601)
     assert "No se pudieron importar las estadísticas" in caplog.text
+
+
+# --------------------------------------------------------------------------- #
+# Detección de fugas con la forma REAL de la API
+# --------------------------------------------------------------------------- #
+# Hasta la 0.7.3 `_detect_leak` no tenía ni un test directo: los del sensor le
+# inyectaban el resultado ya calculado. Y la API manda el día en curso con sus
+# 24 horas, las que aún no se han publicado con `indice: None` y `consumo: 0`
+# (comprobado contra la API real). Contarlas como consumo cero hacía que una
+# noche sin publicar pareciese una noche sin gastar agua.
+def _goteo(fecha: str, indice_inicial: int, litros_hora: int = 2) -> dict:
+    """Un día con un goteo permanente: ninguna hora baja de `litros_hora`."""
+    return build_day(fecha, indice_inicial, [litros_hora] * 24)
+
+
+def test_un_goteo_de_tres_noches_se_detecta(coordinator):
+    dias = [_goteo("2026-09-21", 1000), _goteo("2026-09-22", 1048)]
+    dias.append(_goteo("2026-09-23", 1096))
+
+    fuga = coordinator._detect_leak(dias)
+
+    assert fuga["analizado"] is True
+    assert fuga["detectada"] is True
+    assert fuga["desde"] == "2026-09-21"
+
+
+def test_la_noche_de_hoy_sin_publicar_no_tapa_una_fuga(coordinator):
+    """El caso que desactivaba la alarma cada madrugada.
+
+    De madrugada, el día de hoy llega con las 24 horas y ninguna publicada.
+    Leída como consumo cero, bastaba para decir «no hay fuga» con un goteo en
+    marcha, y el sensor se apagaba hasta que EMASESA publicaba la noche.
+    """
+    dias = [_goteo("2026-09-21", 1000), _goteo("2026-09-22", 1048)]
+    dias.append(_goteo("2026-09-23", 1096))
+    dias.append(_dia_en_curso("2026-09-24", 1144, horas_con_dato=0))
+
+    fuga = coordinator._detect_leak(dias)
+
+    assert fuga["detectada"] is True
+    assert fuga["noches"] == 3
+
+
+def test_con_la_noche_de_hoy_ya_publicada_si_cuenta(coordinator):
+    """El día en curso vale en cuanto su franja nocturna está publicada."""
+    dias = [_goteo("2026-09-22", 1048), _goteo("2026-09-23", 1096)]
+    dias.append(_dia_en_curso("2026-09-24", 1144, horas_con_dato=13))
+
+    fuga = coordinator._detect_leak(dias)
+
+    assert fuga["analizado"] is True
+    assert fuga["detectada"] is True
+    assert fuga["desde"] == "2026-09-22"
+
+
+def test_sin_tres_noches_publicadas_no_se_afirma_nada(coordinator):
+    """Dos noches reales y una sin publicar no permiten decir «sin fuga»."""
+    dias = [
+        build_day("2026-09-22", 1000, [0] * 24),
+        build_day("2026-09-23", 1000, [0] * 24),
+    ]
+    dias.append(_dia_en_curso("2026-09-24", 1000, horas_con_dato=0))
+
+    fuga = coordinator._detect_leak(dias)
+
+    assert fuga["analizado"] is False
+    assert fuga["detectada"] is None
+
+
+def test_una_noche_con_horas_a_cero_descarta_la_fuga(coordinator):
+    """Un hogar normal: alguna hora de madrugada sin consumo."""
+    dias = [_goteo("2026-09-21", 1000), _goteo("2026-09-22", 1048)]
+    dias.append(build_day("2026-09-23", 1096, [0] * 24))
+
+    fuga = coordinator._detect_leak(dias)
+
+    assert fuga["analizado"] is True
+    assert fuga["detectada"] is False
+    assert fuga["min_l_h"] == 0.0

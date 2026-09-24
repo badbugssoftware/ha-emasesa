@@ -136,7 +136,7 @@ histórico.
 
 | Entidad | `entity_id` de ejemplo | `device_class` | Categoría | Se activa cuando… |
 | --- | --- | --- | --- | --- |
-| **Posible fuga** | `binary_sensor.emasesa_12345678_posible_fuga` | `problem` | – | Durante **3 noches seguidas** ninguna hora entre las **02:00 y las 05:00** baja de 1 L |
+| **Posible fuga** | `binary_sensor.emasesa_12345678_posible_fuga` | `problem` | – | En las **3 últimas noches publicadas** ninguna hora entre las **02:00 y las 05:00** baja de 1 L |
 | **Incidencia de red cercana** | `binary_sensor.emasesa_12345678_incidencia_de_red_cercana` | `problem` | – | Hay una actuación o avería de la red de EMASESA dentro del radio configurado |
 | **Avería del contador** | `binary_sensor.emasesa_12345678_averia_del_contador` | `problem` | Diagnóstico | EMASESA marca el contador en avería y **estima** el consumo |
 | **Incidencia pendiente** | `binary_sensor.emasesa_12345678_incidencia_pendiente` | `problem` | Diagnóstico | Hay una orden de trabajo o incidencia abierta en tu suministro |
@@ -500,9 +500,10 @@ automation:
 
 ### Aviso de posible fuga
 
-El sensor binario ya hace el trabajo: se enciende cuando durante **tres noches seguidas**
+El sensor binario ya hace el trabajo: se enciende cuando en las **tres últimas noches**
 no hay ni una sola hora de madrugada con el consumo a cero, que es el síntoma clásico de
-una cisterna que pierde o de un goteo.
+una cisterna que pierde o de un goteo. Solo cuentan las noches que EMASESA ya ha
+publicado enteras: la de hoy entra en cuanto llega su dato, no antes.
 
 ```yaml
 automation:
