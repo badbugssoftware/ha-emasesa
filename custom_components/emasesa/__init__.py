@@ -21,11 +21,13 @@ from homeassistant.helpers import (
     config_validation as cv,
     device_registry as dr,
     entity_registry as er,
+    issue_registry as ir,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
 from .api import EmasesaClient, EmasesaError
+from .calidad import EmasesaCalidadCoordinator
 from .const import (
     CONF_CONTRACT_ID,
     CONF_DEVICE_ID,
@@ -33,12 +35,15 @@ from .const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_PASSWORD,
+    CONF_RED_SINAC,
     CONF_USERNAME,
     DEFAULT_INCIDENT_RADIUS,
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
+    ISSUE_ELEGIR_RED,
     OPCIONES_OBSOLETAS,
     PLATFORMS,
+    REDES_SINAC,
 )
 from .coordinator import EmasesaCoordinator
 from .entity import LEGACY_RESERVOIR_DEVICE
@@ -83,15 +88,53 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.options.get(CONF_LONGITUDE),
     )
     await coordinator.async_config_entry_first_refresh()
+    coordinator.calidad = _preparar_calidad(hass, entry)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if coordinator.calidad is not None:
+        # En segundo plano y no con first_refresh: SINAC tarda ~30 s y el
+        # arranque de Home Assistant no tiene por qué esperarle. Hasta que
+        # responda, los sensores de calidad quedan como no disponibles.
+        entry.async_create_background_task(
+            hass, coordinator.calidad.async_refresh(), f"{DOMAIN}_calidad_inicial"
+        )
     # Después de montar las plataformas, no antes: para entonces los sensores
     # de embalses ya se han reasignado al dispositivo del contrato.
     _retirar_dispositivo_de_embalses(hass, entry, coordinator)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     _async_register_services(hass)
     return True
+
+
+@callback
+def _preparar_calidad(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> EmasesaCalidadCoordinator | None:
+    """Coordinator de SINAC para la red elegida, o un aviso para elegirla.
+
+    La red la elige quien instala; no se deduce de la dirección. Las entradas
+    creadas antes de que existiera la calidad del agua no tienen ninguna, así
+    que se les pide desde Reparaciones en vez de suponer una. Hasta entonces no
+    se consulta SINAC ni se crean las entidades de calidad.
+    """
+    issue_id = f"{ISSUE_ELEGIR_RED}_{entry.entry_id}"
+    red = entry.options.get(CONF_RED_SINAC)
+    if red in REDES_SINAC:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return EmasesaCalidadCoordinator(hass, red)
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=True,
+        is_persistent=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_ELEGIR_RED,
+        translation_placeholders={"contrato": entry.title},
+        data={"entry_id": entry.entry_id},
+    )
+    return None
 
 
 @callback
@@ -221,6 +264,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return False
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Al borrar el contrato, su aviso de elegir red ya no tiene sentido."""
+    ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_ELEGIR_RED}_{entry.entry_id}")
+
+
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Recarga cuando cambian las opciones (ubicación o radio de incidencias)."""
+    """Recarga cuando cambian las opciones (ubicación, radio o red de SINAC)."""
     await hass.config_entries.async_reload(entry.entry_id)

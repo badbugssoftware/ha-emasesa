@@ -74,6 +74,9 @@ incluido el **coste en euros** calculado con el **simulador oficial de tarifas**
   consumo estimado, **incidencia pendiente** en tu suministro e **incidencias de la red**
   de EMASESA cerca de tu casa.
 - **Estado de los embalses** que abastecen a Sevilla.
+- **Calidad del agua del grifo** de tu red de abastecimiento: cloro, dureza, pH,
+  conductividad, turbidez y la calificación del último análisis, según los boletines que
+  EMASESA notifica a **SINAC** (Ministerio de Sanidad).
 - **Configuración 100 % por interfaz**: sin YAML, con soporte de **doble factor (SMS)**,
   **reautenticación** y **selección de contrato** cuando tienes varios suministros.
 
@@ -83,6 +86,8 @@ flowchart LR
     B --> C["9 sensores + 1 por embalse<br/>+ 4 binary_sensors"]
     B --> D["Estadísticas externas<br/>emasesa:…_water<br/>emasesa:…_water_cost"]
     D --> E["Panel de Energía<br/>(agua + coste)"]
+    F["SINAC<br/>(Ministerio de Sanidad)"] --> G["Coordinator de calidad<br/>(12 h)"]
+    G --> H["10 sensores de calidad<br/>+ 1 binary_sensor"]
 ```
 
 ## Entidades que crea
@@ -103,9 +108,15 @@ con el fabricante, modelo y número de serie reales del contador:
 │  Importe pendiente ..................... 0,00 €                  │
 │  Días para la próxima factura .......... 34 d                    │
 │  Embalses .............................. 61,4 %                  │
+│  Cloro libre ........................... 0,8 mg/L                │
+│  Dureza del agua ....................... 120 mg/L                │
+│  pH del agua ........................... 7,9                     │
+│  Conductividad del agua ................ 262 μS/cm               │
+│  Turbidez del agua ..................... 0,2 NTU                 │
 │                                                                  │
 │  Posible fuga .......................... Correcto                │
 │  Incidencia de red cercana ............. Correcto                │
+│  Calidad del agua ...................... Correcto                │
 │  ⚙ Avería del contador ................. Correcto                │
 │  ⚙ Incidencia pendiente ................ Correcto                │
 └──────────────────────────────────────────────────────────────────┘
@@ -132,6 +143,35 @@ entidades más recargan la lista sin aportar nada a la mayoría. Si quieres graf
 evolución de uno concreto, actívalo desde el dispositivo y a partir de ahí tendrá
 histórico.
 
+### Calidad del agua
+
+Salen de **SINAC**, el Sistema de Información Nacional de Aguas de Consumo del Ministerio
+de Sanidad, donde EMASESA está obligada a notificar los análisis de cada **red de
+abastecimiento** (una por municipio). Se consultan cada **12 horas** y solo si has elegido
+la red de tu suministro (ver [Configuración](#configuración)).
+
+| Entidad | Parámetro SINAC | Unidad | `device_class` | Activado |
+| --- | --- | --- | --- | --- |
+| **Cloro libre** | 045 Cloro libre residual | `mg/L` | – | ✅ |
+| **Dureza del agua** | 065 Dureza total (CaCO₃) | `mg/L` | – | ✅ |
+| **pH del agua** | 051 pH | – | `ph` | ✅ |
+| **Conductividad del agua** | 047 Conductividad | `μS/cm` | `conductivity` | ✅ |
+| **Turbidez del agua** | 054 Turbidez | `NTU` | – | ✅ |
+| **Nitrato** ⚪ | 026 Nitrato | `mg/L` | – | – |
+| **Sodio** ⚪ | 052 Sodio | `mg/L` | – | – |
+| **Cloruro** ⚪ | 046 Cloruro | `mg/L` | – | – |
+| **Sulfato** ⚪ | 053 Sulfato | `mg/L` | – | – |
+| **Trihalometanos** ⚪ | 037 Suma de 4 trihalometanos | `µg/L` | – | – |
+
+Todos tienen `state_class: measurement`. Cada parámetro lleva **su propia fecha** en el
+atributo `fecha_analisis`: el cloro, el pH o la conductividad se analizan varias veces por
+semana, y la dureza o los nitratos, unas pocas al año. Si tu red no tiene notificado un
+parámetro, su sensor queda **no disponible**.
+
+> SINAC es lento: la ficha de una red tarda en torno a **30 segundos** en generarse. Por
+> eso se consulta en segundo plano y los sensores de calidad aparecen un rato después de
+> arrancar Home Assistant. Si SINAC falla, el resto de la integración no se entera.
+
 ### Sensores binarios
 
 | Entidad | `entity_id` de ejemplo | `device_class` | Categoría | Se activa cuando… |
@@ -140,6 +180,7 @@ histórico.
 | **Incidencia de red cercana** | `binary_sensor.emasesa_12345678_incidencia_de_red_cercana` | `problem` | – | Hay una actuación o avería de la red de EMASESA dentro del radio configurado |
 | **Avería del contador** | `binary_sensor.emasesa_12345678_averia_del_contador` | `problem` | Diagnóstico | EMASESA marca el contador en avería y **estima** el consumo |
 | **Incidencia pendiente** | `binary_sensor.emasesa_12345678_incidencia_pendiente` | `problem` | Diagnóstico | Hay una orden de trabajo o incidencia abierta en tu suministro |
+| **Calidad del agua** | `binary_sensor.emasesa_12345678_calidad_del_agua` | `problem` | – | El último análisis de control notificado a SINAC califica el agua como **NO apta para el consumo** |
 
 > El `entity_id` real se construye con el **número de contrato** que aparece en tu
 > factura. Compruébalo en *Ajustes → Dispositivos y servicios → EMASESA*.
@@ -301,6 +342,19 @@ Todo se hace desde la interfaz; no hay nada que poner en `configuration.yaml`.
    quieres monitorizar; se muestran como `nº de contrato — dirección de suministro`.
    Si solo hay uno, este paso se salta.
 
+5. **Red de abastecimiento**: elige el municipio cuya red abastece al suministro. De ella
+   salen los datos de [calidad del agua](#calidad-del-agua). No se deduce de la dirección:
+   la eliges tú.
+
+   | Redes de EMASESA en SINAC |
+   | --- |
+   | Alcalá de Guadaíra · Alcalá del Río · Camas · Coria del Río · Dos Hermanas · El Garrobo · El Ronquillo · La Puebla del Río · La Rinconada · Mairena del Alcor · San Juan de Aznalfarache · Sevilla |
+
+> **¿Ya tenías la integración instalada?** Al actualizar, cada contrato aparece en
+> **Ajustes → Sistema → Reparaciones** con el aviso *Elige la red de abastecimiento*.
+> Pulsa en él, elige tu municipio y los sensores de calidad aparecen solos. Mientras no la
+> elijas, todo lo demás sigue funcionando igual.
+
 Puedes **repetir el proceso** para añadir más contratos: cada uno se crea como una entrada
 independiente, con su propio dispositivo y sus propias estadísticas.
 
@@ -319,6 +373,7 @@ En la tarjeta de la integración, **Configurar**:
 | --- | --- | --- | --- |
 | Ubicación del suministro | `latitude` / `longitude` | La de Home Assistant | – |
 | Radio de incidencias cercanas (metros) | `incident_radius_m` | `1000` | `100` – `20000` |
+| Red de abastecimiento (calidad del agua) | `red_sinac` | La elegida en el alta | Las 12 redes de EMASESA |
 
 ### El intervalo de sondeo no se configura
 
@@ -756,7 +811,12 @@ entradas. En el siguiente sondeo, la integración volverá a importar el histór
 4. **Datos**: consumo horario por rango de fechas, último día disponible, información del
    contador, valoración del consumo del ciclo, simulación de factura, facturas, embalses y
    actuaciones en la red.
-5. **Estadísticas**: el índice acumulado del contador (en litros) se convierte a m³ y se
+5. **Calidad del agua**: `POST` a la ficha de la red en SINAC
+   (`informacionAbastecimientoActionDetalleRed.do`, con `idRed` y `codMunicipio`), que
+   devuelve HTML. Se leen la tabla de *últimos valores notificados* —por el **código del
+   parámetro** en el RD 3/2023, que no cambia, y no por su nombre, que sí— y la calificación
+   del último *análisis de control*.
+6. **Estadísticas**: el índice acumulado del contador (en litros) se convierte a m³ y se
    escribe como suma monotónica en `emasesa:<contrato>_water`; el coste se acumula por
    incrementos en `emasesa:<contrato>_water_cost`.
 

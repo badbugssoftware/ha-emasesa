@@ -26,6 +26,7 @@ from .api import (
     EmasesaTwoFactorRequired,
     parse_hour_dt,
 )
+from .calidad import EmasesaCalidadCoordinator
 from .const import (
     DEFAULT_INCIDENT_RADIUS,
     DOMAIN,
@@ -156,6 +157,9 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._ultima_fecha_dato: str | None = None
         # None: se renueva en el primer ciclo tras arrancar.
         self._ultima_renovacion: datetime | None = None
+        # Calidad del agua (SINAC). Tiene su propio ritmo y sus propios fallos,
+        # así que va en un coordinator aparte; lo crea async_setup_entry.
+        self.calidad: EmasesaCalidadCoordinator | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:

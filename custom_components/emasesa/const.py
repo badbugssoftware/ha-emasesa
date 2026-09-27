@@ -97,3 +97,43 @@ CONF_LONGITUDE = "longitude"
 DEFAULT_INCIDENT_RADIUS = 1000
 MIN_INCIDENT_RADIUS = 100
 MAX_INCIDENT_RADIUS = 20000
+
+# --- Calidad del agua (SINAC) ---------------------------------------------
+# El Ministerio de Sanidad publica en SINAC los boletines analíticos que cada
+# gestor está obligado a notificar (RD 3/2023). Es mejor fuente que los PDF
+# mensuales de la web de EMASESA: va por red de abastecimiento —es decir, por
+# municipio—, trae la fecha de cada parámetro y los análisis de control se
+# notifican varias veces por semana. Y es HTML, sin dependencias para leer PDF.
+SINAC_DETALLE_URL = (
+    "https://sinac.sanidad.gob.es/CiudadanoWeb/ciudadano/"
+    "informacionAbastecimientoActionDetalleRed.do"
+)
+# SINAC tarda unos 30 s en generar la ficha de una red, y la de Sevilla, la
+# más grande, ha llegado a pasar de dos minutos (medido en septiembre de 2026).
+# Como la consulta va en segundo plano, esperar de más no molesta a nadie.
+SINAC_TIMEOUT = 240
+# Los boletines llegan cada pocos días: dos consultas al día sobran.
+CALIDAD_INTERVAL = timedelta(hours=12)
+
+# Redes de abastecimiento de EMASESA en SINAC: código INE del municipio ->
+# (nombre, id de la red). Son identificadores del propio SINAC y no cambian;
+# sacados recorriendo todos los municipios de la provincia de Sevilla y
+# quedándose con las redes cuyo gestor es EMASESA.
+# La elige quien instala: no se deduce de nada. Hasta que no hay una elegida
+# no se consulta SINAC ni se crean las entidades de calidad.
+CONF_RED_SINAC = "red_sinac"
+ISSUE_ELEGIR_RED = "elegir_red_sinac"
+REDES_SINAC: dict[str, tuple[str, str]] = {
+    "41004": ("Alcalá de Guadaíra", "1376"),
+    "41005": ("Alcalá del Río", "1366"),
+    "41021": ("Camas", "1372"),
+    "41034": ("Coria del Río", "1369"),
+    "41038": ("Dos Hermanas", "1375"),
+    "41043": ("El Garrobo", "1365"),
+    "41058": ("Mairena del Alcor", "1373"),
+    "41079": ("La Puebla del Río", "1368"),
+    "41081": ("La Rinconada", "1367"),
+    "41083": ("El Ronquillo", "8349"),
+    "41086": ("San Juan de Aznalfarache", "1371"),
+    "41091": ("Sevilla", "1374"),
+}

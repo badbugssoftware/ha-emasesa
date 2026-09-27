@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .calidad import EmasesaCalidadCoordinator
 from .const import ATTRIBUTION, CONF_CONTRACT_NUMBER, DOMAIN
 from .coordinator import EmasesaCoordinator
 
@@ -66,4 +67,35 @@ class EmasesaEntity(CoordinatorEntity[EmasesaCoordinator]):
         Antes del primer refresco correcto `coordinator.data` es None, así que
         sin esto cada propiedad tendría que repetir el `or {}`.
         """
+        return self.coordinator.data or {}
+
+
+ATTRIBUTION_SINAC = "Boletines de EMASESA notificados a SINAC (Ministerio de Sanidad)"
+
+
+class EmasesaCalidadEntity(CoordinatorEntity[EmasesaCalidadCoordinator]):
+    """Base de las entidades de calidad del agua.
+
+    Leen del coordinator de SINAC pero cuelgan del MISMO dispositivo que el
+    resto del contrato: para quien la usa es una propiedad más de su
+    suministro, no un aparato distinto. Mismo esquema de `unique_id`.
+    """
+
+    _attr_has_entity_name = True
+    _attr_attribution = ATTRIBUTION_SINAC
+
+    def __init__(
+        self,
+        coordinator: EmasesaCoordinator,
+        entry: ConfigEntry,
+        key: str,
+    ) -> None:
+        assert coordinator.calidad is not None
+        super().__init__(coordinator.calidad)
+        self._attr_unique_id = f"{coordinator.contract_id}_{key}"
+        self._attr_device_info = build_device_info(coordinator, entry)
+
+    @property
+    def datos(self) -> dict[str, Any]:
+        """Último dato de SINAC, nunca None (ver EmasesaEntity.datos)."""
         return self.coordinator.data or {}

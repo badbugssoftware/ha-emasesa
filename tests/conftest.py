@@ -422,3 +422,78 @@ def _sin_avisos_de_uso_obsoleto(caplog: pytest.LogCaptureFixture):
         and "custom integration 'emasesa'" in registro.getMessage()
     ]
     assert not avisos, "Home Assistant avisa de uso obsoleto:\n" + "\n".join(avisos)
+
+
+# --------------------------------------------------------------------------- #
+# SINAC (calidad del agua)
+# --------------------------------------------------------------------------- #
+def _fila_parametro(codigo: str, nombre: str, valor: str, unidad: str, fecha: str):
+    """Fila de la tabla de parámetros, con el mismo marcado que usa SINAC."""
+    if valor == "Sin datos en SINAC":
+        celdas = [codigo, nombre, valor, "", "", ""]
+    else:
+        celdas = [codigo, nombre, valor, unidad, fecha, "EMASESA LABORATORIO"]
+    return (
+        '<tr class="celdaParU">\n'
+        + "".join(f"<td>{c}</td>\n" for c in celdas)
+        + "</tr>\n"
+    )
+
+
+def _fila_control(fecha: str, calificacion: str, boletin: int) -> str:
+    return (
+        '<tr class="celdaImPar">\n\t\n\n'
+        f"<td>{fecha}</td>\t<td>{calificacion}</td>\n"
+        f'<td><a\n href="javascript:verDetalle({boletin})">ver</a></td>\n'
+        f'<td><a\n href="javascript:descargaBoletin({boletin})">descargar</a></td>'
+        "\t</tr>\n"
+    )
+
+
+def sinac_html(calificacion: str = "AGUA APTA PARA EL CONSUMO") -> str:
+    """Ficha de una red en SINAC, recortada pero con su estructura real.
+
+    Reproduce lo que complica el parseo: una tabla de características SIN
+    código de parámetro que no debe confundirse con la buena, parámetros
+    "Sin datos en SINAC", nombres que no coinciden con los de otras tablas
+    ("PH") y tres tablas de boletines seguidas, de las que sólo vale la de
+    análisis de control. Los valores son inventados.
+    """
+    return (
+        "<html><body>\n"
+        "<legend>Características del agua</legend>\n"
+        "<table><tr><th>Parámetro</th><th>Valor cuantificado</th></tr>\n"
+        "<tr><td>Calcio</td><td>34</td><td>mg/L</td><td>07/01/2026</td>"
+        "<td>EMASESA LABORATORIO</td></tr>\n"
+        "</table>\n"
+        "<legend>\n\t\t\t\t\tAnálisis de control (10 últimos)\n\t</legend>\n"
+        '<table id="rowIndic" class="tablaCss"><thead><tr>'
+        "<th>Fecha de toma</th><th>Fecha de toma</th><th>Ver detalle</th>"
+        "<th>Descarga</th></tr></thead><tbody>\n"
+        + _fila_control("11/09/2026", calificacion, 101)
+        + _fila_control("08/09/2026", "AGUA APTA PARA EL CONSUMO", 100)
+        + "</tbody></table>\n"
+        "<legend>Análisis de completo (10 últimos)</legend>\n"
+        '<table id="rowIndic" class="tablaCss"><tbody>\n'
+        + _fila_control("08/06/2026", "AGUA NO APTA PARA EL CONSUMO", 99)
+        + "</tbody></table>\n"
+        "<legend>Últimos valor notificado de los parámetros</legend>\n"
+        "<table><tr><th>Código</th><th>Parámetro</th></tr>\n"
+        + _fila_parametro("004", "Legionella spp", "Sin datos en SINAC", "", "")
+        + _fila_parametro("026", "Nitrato", "2", "mg/L", "08/06/2026")
+        + _fila_parametro(
+            "037", "Suma 4 Trihalometanos (THM)", "57", "µg/L", "08/06/2026"
+        )
+        + _fila_parametro("045", "Cloro libre residual", "0.8", "mg/L", "11/09/2026")
+        + _fila_parametro("047", "Conductividad", "262", "µS/cm a 20ºC", "11/09/2026")
+        + _fila_parametro("051", "PH", "7.9", "Unidades pH", "11/09/2026")
+        + _fila_parametro("054", "Turbidez", "0.2", "UNF", "11/09/2026")
+        + _fila_parametro(
+            "054,1", "Valor medio/día turbidez", "Sin datos en SINAC", "", ""
+        )
+        + _fila_parametro(
+            "055", "Indice de Langelier", "-0.1", "Unidades pH", "08/06/2026"
+        )
+        + _fila_parametro("065", "Dureza Total (CaCO3)", "120", "mg/L", "07/01/2026")
+        + "</table>\n</body></html>\n"
+    )
