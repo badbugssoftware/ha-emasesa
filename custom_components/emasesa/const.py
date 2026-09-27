@@ -112,8 +112,10 @@ SINAC_DETALLE_URL = (
 # más grande, ha llegado a pasar de dos minutos (medido en septiembre de 2026).
 # Como la consulta va en segundo plano, esperar de más no molesta a nadie.
 SINAC_TIMEOUT = 240
-# Los boletines llegan cada pocos días: dos consultas al día sobran.
-CALIDAD_INTERVAL = timedelta(hours=12)
+# Una consulta al día. Los análisis de control se toman 2 o 3 veces por semana
+# y llegan a SINAC con más de una semana de retraso; los completos, una vez al
+# mes. Mirar más a menudo no adelanta nada.
+CALIDAD_INTERVAL = timedelta(hours=24)
 
 # Redes de abastecimiento de EMASESA en SINAC: código INE del municipio ->
 # (nombre, id de la red). Son identificadores del propio SINAC y no cambian;

@@ -86,7 +86,7 @@ flowchart LR
     B --> C["9 sensores + 1 por embalse<br/>+ 4 binary_sensors"]
     B --> D["Estadísticas externas<br/>emasesa:…_water<br/>emasesa:…_water_cost"]
     D --> E["Panel de Energía<br/>(agua + coste)"]
-    F["SINAC<br/>(Ministerio de Sanidad)"] --> G["Coordinator de calidad<br/>(12 h)"]
+    F["SINAC<br/>(Ministerio de Sanidad)"] --> G["Coordinator de calidad<br/>(24 h)"]
     G --> H["10 sensores de calidad<br/>+ 1 binary_sensor"]
 ```
 
@@ -147,7 +147,7 @@ histórico.
 
 Salen de **SINAC**, el Sistema de Información Nacional de Aguas de Consumo del Ministerio
 de Sanidad, donde EMASESA está obligada a notificar los análisis de cada **red de
-abastecimiento** (una por municipio). Se consultan cada **12 horas** y solo si has elegido
+abastecimiento** (una por municipio). Se consultan una vez **cada 24 horas** y solo si has elegido
 la red de tu suministro (ver [Configuración](#configuración)).
 
 | Entidad | Parámetro SINAC | Unidad | `device_class` | Activado |
