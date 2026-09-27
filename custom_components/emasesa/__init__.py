@@ -222,5 +222,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Recarga cuando cambian las opciones (p.ej. intervalo de sondeo)."""
+    """Recarga cuando cambian las opciones (ubicación o radio de incidencias)."""
     await hass.config_entries.async_reload(entry.entry_id)
