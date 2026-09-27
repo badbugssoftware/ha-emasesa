@@ -5,7 +5,7 @@
 <h1 align="center">EMASESA (Aguas de Sevilla) para Home Assistant</h1>
 
 [![HACS: repositorio personalizado](https://img.shields.io/badge/HACS-repositorio%20personalizado-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://hacs.xyz/docs/faq/custom_repositories/)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%E2%89%A5%202024.6-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%E2%89%A5%202024.12-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-3DA639?style=for-the-badge)](LICENSE)
 
 [![Validate](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/validate.yml/badge.svg)](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/validate.yml)
@@ -252,7 +252,7 @@ dentro del ciclo.
 | --- | --- |
 | **Contador con telelectura NB-IoT** | Es lo que da el detalle **diario y horario**. EMASESA tiene ya telegestionado en torno al **80 % del parque de contadores**; si el tuyo aún es mecánico, la integración arrancará pero apenas tendrás datos. |
 | **Cuenta de la Oficina Virtual / app Mi Emasesa** | Con acceso al contrato que quieras monitorizar. |
-| **Home Assistant ≥ 2024.6** | Requerido por el config flow y la API de estadísticas que se usa. |
+| **Home Assistant ≥ 2024.12** | Requerido por el config flow (opciones y reautenticación) y la API de estadísticas que se usa. Es el mismo mínimo que declara `hacs.json`. |
 | **Integración `recorder` activa** | Es una dependencia declarada: sin ella no hay estadísticas de largo plazo ni panel de Energía. Viene activada de serie salvo que la hayas desactivado a mano. |
 | **Ubicación de tu casa configurada** | Solo para el sensor de *incidencia de red cercana*, que compara las coordenadas de las actuaciones de EMASESA con las de tu instalación. |
 

@@ -151,15 +151,17 @@ Qué se espera de un PR:
 
 ### Integración continua
 
-Con cada push y cada PR se ejecutan dos flujos de trabajo:
+Con cada push y cada PR se ejecutan tres flujos de trabajo:
 
 | Flujo | Qué comprueba |
 | --- | --- |
 | `.github/workflows/lint.yml` | `ruff check` y `ruff format --check` |
+| `.github/workflows/tests.yml` | La batería de **pytest** contra la última versión de Home Assistant |
 | `.github/workflows/validate.yml` | **hassfest** (`manifest.json`, `strings.json` y traducciones) y **HACS Action** (estructura del repositorio y `hacs.json`) |
 
-`validate.yml` se lanza además todos los lunes, para detectar roturas causadas por cambios
-en hassfest o en HACS aunque nadie haya tocado el repositorio.
+`tests.yml` y `validate.yml` se lanzan además todos los lunes, para detectar roturas
+causadas por cambios en Home Assistant, hassfest o HACS aunque nadie haya tocado el
+repositorio.
 
 ## Estructura del proyecto
 
@@ -181,9 +183,9 @@ custom_components/emasesa/
     ├── es.json
     └── en.json
 
-tests/                 # pytest (api, coordinator)
+tests/                 # pytest (api, config_flow, coordinator, entities)
 ruff.toml              # configuración del linter/formateador
-.github/workflows/     # lint.yml y validate.yml
+.github/workflows/     # lint.yml, tests.yml y validate.yml
 ```
 
 Reglas rápidas:
