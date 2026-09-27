@@ -61,6 +61,13 @@ OPCIONES_OBSOLETAS = ("scan_minutes", "scan_hours")
 SCAN_INTERVAL = timedelta(hours=8)
 SCAN_INTERVAL_ESPERA = timedelta(hours=3)
 
+# EMASESA deja de fiarse de un dispositivo unos 55 días después de su "último
+# acceso", y ese último acceso SÓLO lo actualiza el registro del dispositivo,
+# no los inicios de sesión (comprobado contra la API en septiembre de 2026). La
+# app oficial parece registrarlo cada vez que se abre; la integración lo hace
+# una vez por semana, con margen de sobra.
+RENOVAR_CONFIANZA_CADA = timedelta(days=7)
+
 # Días de histórico horario a importar en el primer arranque (backfill).
 INITIAL_BACKFILL_DAYS = 60
 # En cada actualización, re-importamos los últimos N días (rellena huecos).

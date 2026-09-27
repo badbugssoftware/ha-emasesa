@@ -36,6 +36,7 @@ from .const import (
     LEAK_NIGHTS,
     LITERS_PER_M3,
     MAX_BACKFILL_DAYS,
+    RENOVAR_CONFIANZA_CADA,
     SCAN_INTERVAL,
     SCAN_INTERVAL_ESPERA,
     UPDATE_BACKFILL_DAYS,
@@ -153,6 +154,8 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._intervalo_largo = SCAN_INTERVAL
         self._intervalo_corto = SCAN_INTERVAL_ESPERA
         self._ultima_fecha_dato: str | None = None
+        # None: se renueva en el primer ciclo tras arrancar.
+        self._ultima_renovacion: datetime | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -174,6 +177,8 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise ConfigEntryAuthFailed(str(err)) from err
         except EmasesaError as err:
             raise UpdateFailed(str(err)) from err
+
+        await self._renovar_confianza()
 
         # Reúne todos los días (histórico + el último, que puede ser parcial de hoy).
         days_data: dict[str, dict[str, Any]] = {}
@@ -308,6 +313,31 @@ class EmasesaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "nbiot": contador.get("nbiot"),
             },
         }
+
+    async def _renovar_confianza(self) -> None:
+        """Vuelve a registrar el dispositivo de confianza una vez por semana.
+
+        Hasta la 0.7.3 sólo se registraba al configurar o reautenticar. Como
+        iniciar sesión no cuenta como "último acceso" para EMASESA, a los ~55
+        días de la instalación dejaba de fiarse del dispositivo y pedía de nuevo
+        el SMS, aunque la integración entrase varias veces al día.
+
+        Aprovecha la sesión que ya ha abierto este ciclo. Si falla, se reintenta
+        en el siguiente ciclo sin afectar a la actualización.
+        """
+        ahora = dt_util.utcnow()
+        if (
+            self._ultima_renovacion is not None
+            and ahora - self._ultima_renovacion < RENOVAR_CONFIANZA_CADA
+        ):
+            return
+        try:
+            aceptado = await self.client.register_trusted_device()
+        except Exception as err:  # nunca debe tumbar el ciclo
+            _LOGGER.debug("No se pudo renovar el dispositivo de confianza: %s", err)
+            return
+        if aceptado:
+            self._ultima_renovacion = ahora
 
     def _ajustar_intervalo(self, fecha_dato: str | None) -> None:
         """Espacia el sondeo cuando ya se tiene el dato del día.

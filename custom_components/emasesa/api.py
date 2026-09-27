@@ -229,7 +229,7 @@ class EmasesaClient:
 
     async def register_trusted_device(
         self, alias: str = "Home Assistant", modelo: str = "Home Assistant"
-    ) -> None:
+    ) -> bool:
         """Marca el device_id como de confianza (confianza='S').
 
         Igual que la app oficial tras el primer acceso: una vez registrado,
@@ -281,8 +281,9 @@ class EmasesaClient:
                 status,
                 text[:200],
             )
-        else:
-            _LOGGER.debug("Dispositivo EMASESA registrado como de confianza")
+            return False
+        _LOGGER.debug("Dispositivo EMASESA registrado como de confianza")
+        return True
 
     async def _get(self, path: str, retry: bool = True) -> Any:
         """GET autenticado que devuelve JSON."""

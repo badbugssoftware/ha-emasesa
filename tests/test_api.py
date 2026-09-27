@@ -412,7 +412,7 @@ async def test_register_trusted_device_manda_confianza_s(fake_session):
     client._token_expiry = float("inf")
     fake_session.responses.append((200, "{}"))
 
-    await client.register_trusted_device()
+    assert await client.register_trusted_device() is True
 
     req = fake_session.requests[0]
     assert req["method"] == "POST"

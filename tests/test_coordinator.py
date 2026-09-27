@@ -84,6 +84,7 @@ def coordinator() -> EmasesaCoordinator:
     coord._intervalo_corto = SCAN_INTERVAL_ESPERA
     coord._ultima_fecha_dato = None
     coord.update_interval = SCAN_INTERVAL
+    coord._ultima_renovacion = None
     return coord
 
 
@@ -1038,3 +1039,64 @@ def test_una_noche_con_horas_a_cero_descarta_la_fuga(coordinator):
     assert fuga["analizado"] is True
     assert fuga["detectada"] is False
     assert fuga["min_l_h"] == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Renovación semanal del dispositivo de confianza
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_se_renueva_la_confianza_al_arrancar(coordinator):
+    """Tras un arranque no se sabe cuándo se registró: se registra ya."""
+    coordinator.client.register_trusted_device = AsyncMock(return_value=True)
+
+    await coordinator._renovar_confianza()
+
+    coordinator.client.register_trusted_device.assert_awaited_once()
+    assert coordinator._ultima_renovacion is not None
+
+
+@pytest.mark.asyncio
+async def test_no_se_renueva_dos_veces_la_misma_semana(coordinator):
+    """Varios ciclos al día no deben registrar el dispositivo en cada uno."""
+    coordinator.client.register_trusted_device = AsyncMock(return_value=True)
+    coordinator._ultima_renovacion = dt_util.utcnow() - timedelta(days=6)
+
+    await coordinator._renovar_confianza()
+
+    coordinator.client.register_trusted_device.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pasada_una_semana_se_renueva(coordinator):
+    coordinator.client.register_trusted_device = AsyncMock(return_value=True)
+    antes = dt_util.utcnow() - timedelta(days=8)
+    coordinator._ultima_renovacion = antes
+
+    await coordinator._renovar_confianza()
+
+    coordinator.client.register_trusted_device.assert_awaited_once()
+    assert coordinator._ultima_renovacion > antes
+
+
+@pytest.mark.asyncio
+async def test_si_emasesa_rechaza_el_registro_se_reintenta(coordinator):
+    """Un rechazo no cuenta como renovado: se vuelve a probar el ciclo siguiente."""
+    coordinator.client.register_trusted_device = AsyncMock(return_value=False)
+
+    await coordinator._renovar_confianza()
+
+    assert coordinator._ultima_renovacion is None
+
+
+@pytest.mark.asyncio
+async def test_un_fallo_al_renovar_no_tumba_el_ciclo(coordinator):
+    """La renovación es un extra: si falla la red, la actualización sigue."""
+    from custom_components.emasesa.api import EmasesaError
+
+    coordinator.client.register_trusted_device = AsyncMock(
+        side_effect=EmasesaError("timeout")
+    )
+
+    await coordinator._renovar_confianza()
+
+    assert coordinator._ultima_renovacion is None
