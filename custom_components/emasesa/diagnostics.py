@@ -73,6 +73,8 @@ async def async_get_config_entry_diagnostics(
     # Los identificadores de las estadísticas llevan el contrato dentro; se
     # conserva la forma (`emasesa:…_water`), que sí ayuda a diagnosticar.
     contrato = coordinator.contract_id
+    calidad = coordinator.calidad
+    datos_calidad = (calidad.data or {}) if calidad else {}
     return {
         "entry": _entrada(entry),
         "coordinator": {
@@ -84,5 +86,15 @@ async def async_get_config_entry_diagnostics(
             ),
             "incident_radius_m": coordinator.incident_radius_m,
         },
+        # Sólo el estado de la consulta: los valores analíticos son públicos y
+        # no aportan nada a un diagnóstico. La red es el municipio, no la casa.
+        "calidad": {
+            "red": calidad.nombre_red,
+            "last_update_success": calidad.last_update_success,
+            "parametros": len(datos_calidad.get("parametros") or {}),
+            "ultimo_control": datos_calidad.get("ultimo_control"),
+        }
+        if calidad
+        else None,
         "data": async_redact_data(data, REDACT_DATA),
     }

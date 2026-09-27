@@ -24,11 +24,14 @@ from custom_components.emasesa.api import (
     EmasesaError,
     EmasesaTwoFactorRequired,
     _loads,
+    get_sinac_detail,
     parse_hour_dt,
+    parse_sinac_detail,
 )
 from custom_components.emasesa.const import (
     API_BASE,
     CLIENT_BASIC,
+    SINAC_DETALLE_URL,
     SISTEMA,
     TOKEN_URL,
 )
@@ -48,6 +51,7 @@ from .conftest import (
     USERNAME,
     FakeSession,
     day_2026_07_31,
+    sinac_html,
 )
 
 LOGIN_URL = f"{API_BASE}/login/autenticarUsuario?sistema={SISTEMA}"
@@ -510,3 +514,95 @@ def test_normalize_username(escrito, esperado):
     from custom_components.emasesa.config_flow import normalize_username
 
     assert normalize_username(escrito) == esperado
+
+
+# --------------------------------------------------------------------------- #
+# SINAC (calidad del agua)
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_sinac_se_pide_con_un_post_de_formulario(aiohttp_session):
+    """Basta el id de la red y el municipio: sin sesión ni pasar por el buscador."""
+    peticion: dict = {}
+    with aioresponses() as m:
+        m.post(
+            SINAC_DETALLE_URL,
+            callback=_recorder(peticion, CallbackResult(status=200, body=sinac_html())),
+        )
+        page = await get_sinac_detail(aiohttp_session, "41038", "1375")
+
+    assert "Cloro libre residual" in page
+    assert peticion["data"] == {"idRed": "1375", "codMunicipio": "41038"}
+
+
+@pytest.mark.asyncio
+async def test_sinac_error_http(aiohttp_session):
+    with aioresponses() as m:
+        m.post(SINAC_DETALLE_URL, status=503)
+        with pytest.raises(EmasesaError, match="503"):
+            await get_sinac_detail(aiohttp_session, "41091", "1374")
+
+
+@pytest.mark.asyncio
+async def test_sinac_sin_respuesta(aiohttp_session):
+    with aioresponses() as m:
+        m.post(SINAC_DETALLE_URL, exception=TimeoutError())
+        with pytest.raises(EmasesaError, match="a tiempo"):
+            await get_sinac_detail(aiohttp_session, "41091", "1374")
+
+
+def test_sinac_parametros_por_codigo():
+    datos = parse_sinac_detail(sinac_html())
+    parametros = datos["parametros"]
+
+    assert parametros["045"] == {
+        "nombre": "Cloro libre residual",
+        "valor": 0.8,
+        "unidad": "mg/L",
+        "fecha": "2026-09-11",
+    }
+    assert parametros["051"]["valor"] == 7.9
+    assert parametros["055"]["valor"] == -0.1
+    assert parametros["065"]["fecha"] == "2026-01-07"
+
+
+def test_sinac_omite_lo_que_no_tiene_dato():
+    parametros = parse_sinac_detail(sinac_html())["parametros"]
+
+    assert "004" not in parametros
+    assert "054,1" not in parametros
+
+
+def test_sinac_ignora_la_tabla_sin_codigo():
+    """ "Características del agua" repite parámetros pero sin código legal."""
+    parametros = parse_sinac_detail(sinac_html())["parametros"]
+
+    assert all(p["nombre"] != "Calcio" for p in parametros.values())
+
+
+def test_sinac_ultimo_control_es_el_mas_reciente():
+    control = parse_sinac_detail(sinac_html())["ultimo_control"]
+
+    assert control == {
+        "fecha": "2026-09-11",
+        "calificacion": "AGUA APTA PARA EL CONSUMO",
+    }
+
+
+def test_sinac_el_control_no_se_mezcla_con_el_analisis_completo():
+    """Tras los de control vienen los completos: no deben pisar al último."""
+    html = sinac_html()
+    solo_completo = html[html.index("Análisis de completo") :]
+    datos = parse_sinac_detail(solo_completo)
+
+    assert datos["ultimo_control"] is None
+
+
+def test_sinac_acepta_decimales_con_coma():
+    html = sinac_html().replace("<td>0.8</td>", "<td>0,8</td>")
+    assert parse_sinac_detail(html)["parametros"]["045"]["valor"] == 0.8
+
+
+def test_sinac_pagina_sin_datos_es_un_error():
+    """Una página de error con código 200 no puede pasar por "todo vacío"."""
+    with pytest.raises(EmasesaError):
+        parse_sinac_detail("<html><body>Error interno</body></html>")

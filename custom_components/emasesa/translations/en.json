@@ -22,6 +22,13 @@
           "contrato_id": "Contract / supply point"
         }
       },
+      "red": {
+        "title": "Water quality",
+        "description": "Choose this supply's network. Water quality data (chlorine, hardness, pH…) comes from the reports EMASESA files with SINAC, the Spanish Ministry of Health system. You can change it later in the options.",
+        "data": {
+          "red_sinac": "Supply network"
+        }
+      },
       "reauth_confirm": {
         "title": "Re-authenticate",
         "description": "Your EMASESA session expired. Enter your password again.",
@@ -54,10 +61,12 @@
       "init": {
         "title": "EMASESA options",
         "data": {
-          "ubicacion": "Supply location"
+          "ubicacion": "Supply location",
+          "red_sinac": "Supply network (water quality)"
         },
         "data_description": {
-          "ubicacion": "Where this supply is. Defaults to your Home Assistant location; change it if the contract is for another home or a business."
+          "ubicacion": "Where this supply is. Defaults to your Home Assistant location; change it if the contract is for another home or a business.",
+          "red_sinac": "Municipality whose network supplies this contract. Water quality data comes from the reports EMASESA files with SINAC (Spanish Ministry of Health)."
         }
       }
     }
@@ -90,6 +99,36 @@
       },
       "embalses": {
         "name": "Reservoirs"
+      },
+      "calidad_cloro_libre": {
+        "name": "Free chlorine"
+      },
+      "calidad_dureza": {
+        "name": "Water hardness"
+      },
+      "calidad_ph": {
+        "name": "Water pH"
+      },
+      "calidad_conductividad": {
+        "name": "Water conductivity"
+      },
+      "calidad_turbidez": {
+        "name": "Water turbidity"
+      },
+      "calidad_nitrato": {
+        "name": "Nitrate"
+      },
+      "calidad_sodio": {
+        "name": "Sodium"
+      },
+      "calidad_cloruro": {
+        "name": "Chloride"
+      },
+      "calidad_sulfato": {
+        "name": "Sulphate"
+      },
+      "calidad_trihalometanos": {
+        "name": "Trihalomethanes"
       }
     },
     "binary_sensor": {
@@ -104,6 +143,28 @@
       },
       "incidencia_cercana": {
         "name": "Nearby network incident"
+      },
+      "calidad_agua": {
+        "name": "Water quality"
+      }
+    }
+  },
+  "issues": {
+    "elegir_red_sinac": {
+      "title": "Choose the supply network for {contrato}",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Supply network for {contrato}",
+            "description": "The EMASESA integration can now show your tap water quality (chlorine, hardness, pH, conductivity…) from the reports EMASESA files with SINAC. To enable it, choose your supply network.",
+            "data": {
+              "red_sinac": "Supply network"
+            }
+          }
+        },
+        "abort": {
+          "entry_not_found": "The contract no longer exists."
+        }
       }
     }
   }

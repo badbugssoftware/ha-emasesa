@@ -22,6 +22,13 @@
           "contrato_id": "Contrato / punto de suministro"
         }
       },
+      "red": {
+        "title": "Calidad del agua",
+        "description": "Elige la red de abastecimiento de este suministro. De ella salen los datos de calidad del agua (cloro, dureza, pH…) que EMASESA notifica a SINAC, el sistema del Ministerio de Sanidad. Podrás cambiarla después en las opciones.",
+        "data": {
+          "red_sinac": "Red de abastecimiento"
+        }
+      },
       "reauth_confirm": {
         "title": "Volver a autenticar",
         "description": "La sesión de EMASESA ha caducado. Introduce de nuevo tu contraseña.",
@@ -54,10 +61,12 @@
       "init": {
         "title": "Opciones de EMASESA",
         "data": {
-          "ubicacion": "Ubicación del suministro"
+          "ubicacion": "Ubicación del suministro",
+          "red_sinac": "Red de abastecimiento (calidad del agua)"
         },
         "data_description": {
-          "ubicacion": "Dónde está este suministro. Por defecto, la ubicación de Home Assistant; cámbiala si el contrato es de otra vivienda o de un local."
+          "ubicacion": "Dónde está este suministro. Por defecto, la ubicación de Home Assistant; cámbiala si el contrato es de otra vivienda o de un local.",
+          "red_sinac": "Municipio cuya red abastece a este suministro. De ella salen los datos de calidad del agua que EMASESA notifica a SINAC (Ministerio de Sanidad)."
         }
       }
     }
@@ -90,6 +99,36 @@
       },
       "embalses": {
         "name": "Embalses"
+      },
+      "calidad_cloro_libre": {
+        "name": "Cloro libre"
+      },
+      "calidad_dureza": {
+        "name": "Dureza del agua"
+      },
+      "calidad_ph": {
+        "name": "pH del agua"
+      },
+      "calidad_conductividad": {
+        "name": "Conductividad del agua"
+      },
+      "calidad_turbidez": {
+        "name": "Turbidez del agua"
+      },
+      "calidad_nitrato": {
+        "name": "Nitrato"
+      },
+      "calidad_sodio": {
+        "name": "Sodio"
+      },
+      "calidad_cloruro": {
+        "name": "Cloruro"
+      },
+      "calidad_sulfato": {
+        "name": "Sulfato"
+      },
+      "calidad_trihalometanos": {
+        "name": "Trihalometanos"
       }
     },
     "binary_sensor": {
@@ -104,6 +143,28 @@
       },
       "incidencia_cercana": {
         "name": "Incidencia de red cercana"
+      },
+      "calidad_agua": {
+        "name": "Calidad del agua"
+      }
+    }
+  },
+  "issues": {
+    "elegir_red_sinac": {
+      "title": "Elige la red de abastecimiento de {contrato}",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Red de abastecimiento de {contrato}",
+            "description": "La integración de EMASESA ya puede mostrar la calidad del agua del grifo (cloro, dureza, pH, conductividad…) con los análisis que EMASESA notifica a SINAC. Para ello tienes que elegir la red de abastecimiento de tu suministro.",
+            "data": {
+              "red_sinac": "Red de abastecimiento"
+            }
+          }
+        },
+        "abort": {
+          "entry_not_found": "El contrato ya no existe."
+        }
       }
     }
   }

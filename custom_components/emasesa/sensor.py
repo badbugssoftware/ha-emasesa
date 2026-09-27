@@ -21,7 +21,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfVolume
+from homeassistant.const import PERCENTAGE, UnitOfConductivity, UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import EmasesaCoordinator
-from .entity import EmasesaEntity
+from .entity import EmasesaCalidadEntity, EmasesaEntity
 
 type Datos = dict[str, Any]
 
@@ -231,6 +231,67 @@ SENSORES: tuple[EmasesaSensorEntityDescription, ...] = (
 )
 
 
+# --------------------------------------------------------------------------- #
+# Calidad del agua (SINAC)
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True, kw_only=True)
+class EmasesaCalidadSensorEntityDescription(SensorEntityDescription):
+    """Un parámetro analítico de SINAC.
+
+    `codigo` es el código del parámetro en el anexo del RD 3/2023 ("045" es
+    el cloro libre residual). Se usa en vez del nombre porque SINAC no lo
+    escribe igual en todas sus tablas ("PH", "Dureza Total (CaCO3)").
+    """
+
+    codigo: str
+
+
+def _calidad(
+    key: str,
+    codigo: str,
+    unidad: str | None,
+    *,
+    device_class: SensorDeviceClass | None = None,
+    precision: int = 1,
+    activado: bool = True,
+) -> EmasesaCalidadSensorEntityDescription:
+    return EmasesaCalidadSensorEntityDescription(
+        key=f"calidad_{key}",
+        translation_key=f"calidad_{key}",
+        codigo=codigo,
+        device_class=device_class,
+        native_unit_of_measurement=unidad,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=precision,
+        icon=None if device_class else "mdi:water-check",
+        entity_registry_enabled_default=activado,
+    )
+
+
+# Activados de serie, los que interesan a casi todo el mundo: el cloro (sabor
+# y olor), la dureza (cal en grifos y electrodomésticos), el pH, la
+# conductividad (sales disueltas) y la turbidez. El resto, desactivados: están
+# a un clic para quien quiera graficarlos, sin llenar la lista de los demás.
+SENSORES_CALIDAD: tuple[EmasesaCalidadSensorEntityDescription, ...] = (
+    _calidad("cloro_libre", "045", "mg/L", precision=2),
+    _calidad("dureza", "065", "mg/L", precision=0),
+    _calidad("ph", "051", None, device_class=SensorDeviceClass.PH),
+    _calidad(
+        "conductividad",
+        "047",
+        UnitOfConductivity.MICROSIEMENS_PER_CM,
+        device_class=SensorDeviceClass.CONDUCTIVITY,
+        precision=0,
+    ),
+    _calidad("turbidez", "054", "NTU", precision=2),
+    _calidad("nitrato", "026", "mg/L", activado=False),
+    _calidad("sodio", "052", "mg/L", precision=0, activado=False),
+    _calidad("cloruro", "046", "mg/L", precision=0, activado=False),
+    _calidad("sulfato", "053", "mg/L", precision=0, activado=False),
+    _calidad("trihalometanos", "037", "µg/L", precision=0, activado=False),
+)
+
+
 def _descripcion_embalse(nombre: str) -> EmasesaSensorEntityDescription:
     """Descripción de un embalse concreto (Aracena, Zufre, La Minilla...).
 
@@ -288,6 +349,12 @@ async def async_setup_entry(
         EmasesaSensor(coordinator, entry, descripcion)
         for descripcion in (*SENSORES, *(_descripcion_embalse(n) for n in nombres))
     )
+    # Sin red de SINAC elegida no hay calidad del agua (ver _preparar_calidad).
+    if coordinator.calidad is not None:
+        async_add_entities(
+            EmasesaCalidadSensor(coordinator, entry, descripcion)
+            for descripcion in SENSORES_CALIDAD
+        )
 
 
 class EmasesaSensor(EmasesaEntity, SensorEntity):
@@ -320,3 +387,46 @@ class EmasesaSensor(EmasesaEntity, SensorEntity):
         if (attrs_fn := self.entity_description.attrs_fn) is None:
             return None
         return attrs_fn(self.datos)
+
+
+class EmasesaCalidadSensor(EmasesaCalidadEntity, SensorEntity):
+    """Último valor de un parámetro analítico notificado a SINAC."""
+
+    entity_description: EmasesaCalidadSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: EmasesaCoordinator,
+        entry: ConfigEntry,
+        description: EmasesaCalidadSensorEntityDescription,
+    ) -> None:
+        super().__init__(coordinator, entry, description.key)
+        self.entity_description = description
+
+    @property
+    def _parametro(self) -> dict[str, Any]:
+        parametros = self.datos.get("parametros") or {}
+        return parametros.get(self.entity_description.codigo) or {}
+
+    @property
+    def available(self) -> bool:
+        # No disponible, no "desconocido": si la red no tiene notificado el
+        # parámetro, no es que falte el dato de hoy, es que no lo hay.
+        return super().available and bool(self._parametro)
+
+    @property
+    def native_value(self) -> StateType:
+        return self._parametro.get("valor")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        parametro = self._parametro
+        return {
+            # Cada parámetro tiene su propia fecha: el cloro se mide varias
+            # veces por semana y la dureza unas pocas al año.
+            "fecha_analisis": parametro.get("fecha"),
+            "red": self.datos.get("red"),
+            "parametro_sinac": parametro.get("nombre"),
+            "codigo_sinac": self.entity_description.codigo,
+            "unidad_sinac": parametro.get("unidad"),
+        }

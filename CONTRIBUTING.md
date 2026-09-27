@@ -168,8 +168,9 @@ repositorio.
 ```
 custom_components/emasesa/
 ├── __init__.py        # setup/unload de la entrada, coordinator y servicios
-├── api.py             # cliente HTTP de la API privada (auth, 2FA, endpoints)
-├── binary_sensor.py   # fuga, avería del contador e incidencias
+├── api.py             # cliente HTTP: API privada (auth, 2FA, endpoints) y SINAC
+├── binary_sensor.py   # fuga, avería del contador, incidencias y calidad del agua
+├── calidad.py         # coordinator de calidad del agua (SINAC)
 ├── config_flow.py     # alta, doble factor, selección de contrato, reauth y opciones
 ├── const.py           # dominio, endpoints, claves de config y valores por defecto
 ├── coordinator.py     # sondeo, coste, detección de fugas e importación de estadísticas
@@ -177,6 +178,7 @@ custom_components/emasesa/
 ├── entity.py          # device_info compartido por todas las plataformas
 ├── sensor.py          # entidades sensor
 ├── manifest.json
+├── repairs.py         # aviso para elegir la red de SINAC en instalaciones previas
 ├── services.yaml      # definición de los servicios del dominio
 ├── strings.json       # textos del config flow, opciones y nombres de entidad
 └── translations/

@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .coordinator import EmasesaCoordinator
-from .entity import EmasesaEntity
+from .entity import EmasesaCalidadEntity, EmasesaEntity
 
 type Datos = dict[str, Any]
 
@@ -130,6 +130,8 @@ async def async_setup_entry(
     async_add_entities(
         EmasesaBinarySensor(coordinator, entry, descripcion) for descripcion in SENSORES
     )
+    if coordinator.calidad is not None:
+        async_add_entities([EmasesaCalidadBinarySensor(coordinator, entry)])
 
 
 class EmasesaBinarySensor(EmasesaEntity, BinarySensorEntity):
@@ -155,3 +157,40 @@ class EmasesaBinarySensor(EmasesaEntity, BinarySensorEntity):
         if (attrs_fn := self.entity_description.attrs_fn) is None:
             return None
         return attrs_fn(self.datos)
+
+
+class EmasesaCalidadBinarySensor(EmasesaCalidadEntity, BinarySensorEntity):
+    """Calificación del último análisis de control notificado a SINAC.
+
+    Encendido (problema) si el agua se ha calificado como NO apta para el
+    consumo. SINAC también usa calificaciones intermedias —"apta con no
+    conformidad", por ejemplo—, que no se tratan como problema: el agua sigue
+    siendo apta. Se publica la calificación literal para quien quiera más
+    detalle.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_translation_key = "calidad_agua"
+    _attr_icon = "mdi:water-check"
+
+    def __init__(self, coordinator: EmasesaCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "calidad_agua")
+
+    @property
+    def _control(self) -> dict[str, Any]:
+        return self.datos.get("ultimo_control") or {}
+
+    @property
+    def is_on(self) -> bool | None:
+        calificacion = self._control.get("calificacion")
+        if not calificacion:
+            return None
+        return "NO APTA" in str(calificacion).upper()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "calificacion": self._control.get("calificacion"),
+            "fecha_analisis": self._control.get("fecha"),
+            "red": self.datos.get("red"),
+        }

@@ -25,8 +25,10 @@ Flujo de autenticación (reverseado de la app oficial):
 
 from __future__ import annotations
 
+import html
 import json
 import logging
+import re
 import time
 from datetime import date, datetime
 from typing import Any
@@ -38,6 +40,8 @@ import yarl
 from .const import (
     API_BASE,
     CLIENT_BASIC,
+    SINAC_DETALLE_URL,
+    SINAC_TIMEOUT,
     SISTEMA,
     TOKEN_URL,
     USER_AGENT,
@@ -481,3 +485,124 @@ def _loads(text: str) -> Any:
 def parse_hour_dt(day: str, hour: str) -> datetime:
     """Combina 'fecha' (yyyy-MM-dd) y 'hora' ('00'..'23') en un datetime naive."""
     return datetime.strptime(f"{day} {int(hour):02d}", "%Y-%m-%d %H")
+
+
+# ---------------------------------------------------------------------- #
+# Calidad del agua: SINAC (Ministerio de Sanidad)
+# ---------------------------------------------------------------------- #
+# No es la API de EMASESA sino una web pública, sin autenticación: la ficha de
+# una red de abastecimiento se pide con un POST de formulario, igual que hace
+# el propio buscador de SINAC al pinchar en la red.
+
+_FILA = re.compile(r"(?is)<tr[^>]*>(.*?)</tr>")
+_CELDA = re.compile(r"(?is)<td[^>]*>(.*?)</td>")
+_ETIQUETA = re.compile(r"(?s)<[^>]+>")
+# Código del parámetro en el anexo del RD 3/2023: "045", "054,1"...
+_CODIGO = re.compile(r"^\d{3}(?:,\d+)?$")
+_FECHA = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
+
+
+async def get_sinac_detail(
+    session: aiohttp.ClientSession, cod_municipio: str, id_red: str
+) -> str:
+    """HTML de la ficha de una red de abastecimiento en SINAC.
+
+    Bastan el id de la red y el municipio: no hace falta sesión ni pasar antes
+    por el buscador. La respuesta tarda del orden de 30 s.
+    """
+    try:
+        async with session.post(
+            SINAC_DETALLE_URL,
+            data={"idRed": id_red, "codMunicipio": cod_municipio},
+            timeout=aiohttp.ClientTimeout(total=SINAC_TIMEOUT),
+        ) as resp:
+            # La cabecera dice UTF-8 y el <meta> ISO-8859-1; manda la cabecera,
+            # que es la que acierta. `replace` por si algún día no la acierta.
+            text = await resp.text(errors="replace")
+            status = resp.status
+    except TimeoutError as err:
+        raise EmasesaError("SINAC no respondió a tiempo") from err
+    except aiohttp.ClientError as err:
+        raise EmasesaError(f"No se pudo contactar con SINAC: {err}") from err
+    if status != 200:
+        raise EmasesaError(f"SINAC respondió {status}")
+    return text
+
+
+def _texto(celda: str) -> str:
+    return " ".join(html.unescape(_ETIQUETA.sub(" ", celda)).split())
+
+
+def _fecha_iso(texto: str) -> str | None:
+    """'08/09/2026' -> '2026-09-08'."""
+    m = _FECHA.match(texto)
+    return f"{m[3]}-{m[2]}-{m[1]}" if m else None
+
+
+def _numero(texto: str) -> float | None:
+    """Valor cuantificado de SINAC ('0.8', '263', '-0.1'; a veces con coma)."""
+    try:
+        return float(texto.replace(",", "."))
+    except ValueError:
+        return None
+
+
+def parse_sinac_detail(page: str) -> dict[str, Any]:
+    """Extrae de la ficha de SINAC los parámetros y el último análisis.
+
+    Devuelve::
+
+        {
+            "parametros": {
+                "045": {"nombre": "Cloro libre residual", "valor": 0.8,
+                        "unidad": "mg/L", "fecha": "2026-09-11"},
+                ...
+            },
+            "ultimo_control": {"fecha": "2026-09-11",
+                               "calificacion": "AGUA APTA PARA EL CONSUMO"},
+        }
+
+    Los parámetros salen de la tabla "Últimos valor notificado de los
+    parámetros de la legislación vigente": una fila por parámetro con su
+    código legal, que es lo que se usa como clave porque el nombre cambia de
+    una tabla a otra ("PH", "Dureza Total (CaCO3)"...). Los que SINAC marca
+    como "Sin datos en SINAC" se omiten.
+
+    Si la página no trae ninguna de las dos cosas, se considera que SINAC ha
+    cambiado de formato (o ha devuelto una página de error con código 200) y
+    se lanza EmasesaError en vez de dejar todos los sensores vacíos sin avisar.
+    """
+    parametros: dict[str, dict[str, Any]] = {}
+    for fila in _FILA.findall(page):
+        celdas = [_texto(c) for c in _CELDA.findall(fila)]
+        if len(celdas) < 5 or not _CODIGO.match(celdas[0]):
+            continue
+        valor = _numero(celdas[2])
+        if valor is None:
+            continue
+        parametros.setdefault(
+            celdas[0],
+            {
+                "nombre": celdas[1],
+                "valor": valor,
+                "unidad": celdas[3],
+                "fecha": _fecha_iso(celdas[4]),
+            },
+        )
+
+    # Los análisis de control van en su propia tabla, del más reciente al más
+    # antiguo, justo después de su título y antes de la de análisis completos.
+    ultimo_control: dict[str, Any] | None = None
+    inicio = page.find("Análisis de control")
+    if inicio != -1:
+        fin = page.find("Análisis de completo", inicio)
+        seccion = page[inicio : fin if fin != -1 else None]
+        for fila in _FILA.findall(seccion):
+            celdas = [_texto(c) for c in _CELDA.findall(fila)]
+            if len(celdas) >= 2 and (fecha := _fecha_iso(celdas[0])):
+                ultimo_control = {"fecha": fecha, "calificacion": celdas[1]}
+                break
+
+    if not parametros and ultimo_control is None:
+        raise EmasesaError("La ficha de SINAC no trae datos de calidad reconocibles")
+    return {"parametros": parametros, "ultimo_control": ultimo_control}

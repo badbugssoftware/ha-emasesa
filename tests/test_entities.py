@@ -22,13 +22,24 @@ from custom_components.emasesa.const import (
     CONF_CONTRACT_ID,
     CONF_CONTRACT_NUMBER,
     CONF_DEVICE_ID,
+    CONF_INCIDENT_RADIUS,
     CONF_PASSWORD,
+    CONF_RED_SINAC,
     CONF_USERNAME,
     DOMAIN,
 )
-from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNKNOWN
+from homeassistant.const import (
+    STATE_OFF,
+    STATE_ON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
 
 from .conftest import CONTRACT_ID, PASSWORD, USERNAME
 
@@ -124,10 +135,55 @@ DATOS: dict[str, Any] = {
 }
 
 
+# Lo que devuelve el coordinator de SINAC (ver parse_sinac_detail).
+CALIDAD: dict[str, Any] = {
+    "red": "Sevilla",
+    "parametros": {
+        "045": {
+            "nombre": "Cloro libre residual",
+            "valor": 0.8,
+            "unidad": "mg/L",
+            "fecha": "2026-09-11",
+        },
+        "047": {
+            "nombre": "Conductividad",
+            "valor": 262.0,
+            "unidad": "µS/cm a 20ºC",
+            "fecha": "2026-09-11",
+        },
+        "051": {
+            "nombre": "PH",
+            "valor": 7.9,
+            "unidad": "Unidades pH",
+            "fecha": "2026-09-11",
+        },
+        "054": {"nombre": "Turbidez", "valor": 0.2, "unidad": "UNF", "fecha": None},
+        "065": {
+            "nombre": "Dureza Total (CaCO3)",
+            "valor": 120.0,
+            "unidad": "mg/L",
+            "fecha": "2026-01-07",
+        },
+        "026": {"nombre": "Nitrato", "valor": 2.0, "unidad": "mg/L", "fecha": None},
+    },
+    "ultimo_control": {
+        "fecha": "2026-09-11",
+        "calificacion": "AGUA APTA PARA EL CONSUMO",
+    },
+}
+
+
 async def setup_integration(
-    hass: HomeAssistant, datos: dict[str, Any] | None = None
+    hass: HomeAssistant,
+    datos: dict[str, Any] | None = None,
+    calidad: dict[str, Any] | Exception | None = None,
+    opciones: dict[str, Any] | None = None,
 ) -> MockConfigEntry:
-    """Monta la integración con un coordinator que no toca la red."""
+    """Monta la integración con coordinators que no tocan la red.
+
+    `calidad` es lo que devuelve SINAC; si es una excepción, SINAC falla. Por
+    defecto la entrada tiene elegida la red de Sevilla.
+    """
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id=CONTRACT_ID,
@@ -139,16 +195,30 @@ async def setup_integration(
             CONF_CONTRACT_ID: CONTRACT_ID,
             CONF_CONTRACT_NUMBER: "0012345678",
         },
+        options={CONF_RED_SINAC: "41091"} if opciones is None else opciones,
     )
     entry.add_to_hass(hass)
 
-    with patch(
-        "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
-        return_value=DATOS if datos is None else datos,
+    calidad = CALIDAD if calidad is None else calidad
+    with (
+        patch(
+            "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
+            return_value=DATOS if datos is None else datos,
+        ),
+        patch(
+            "custom_components.emasesa.calidad.EmasesaCalidadCoordinator._async_update_data",
+            side_effect=calidad if isinstance(calidad, Exception) else None,
+            return_value=calidad,
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     return entry
+
+
+def registro_unique_id(hass: HomeAssistant, entity_id: str) -> str:
+    entrada = er.async_get(hass).async_get(entity_id)
+    return entrada.unique_id if entrada else ""
 
 
 def estado(hass: HomeAssistant, dominio: str, key: str) -> Any:
@@ -187,6 +257,17 @@ UNIQUE_IDS_PUBLICADOS = {
     f"{CONTRACT_ID}_averia_contador",
     f"{CONTRACT_ID}_incidencia_pendiente",
     f"{CONTRACT_ID}_incidencia_cercana",
+    f"{CONTRACT_ID}_calidad_cloro_libre",
+    f"{CONTRACT_ID}_calidad_dureza",
+    f"{CONTRACT_ID}_calidad_ph",
+    f"{CONTRACT_ID}_calidad_conductividad",
+    f"{CONTRACT_ID}_calidad_turbidez",
+    f"{CONTRACT_ID}_calidad_nitrato",
+    f"{CONTRACT_ID}_calidad_sodio",
+    f"{CONTRACT_ID}_calidad_cloruro",
+    f"{CONTRACT_ID}_calidad_sulfato",
+    f"{CONTRACT_ID}_calidad_trihalometanos",
+    f"{CONTRACT_ID}_calidad_agua",
 }
 
 
@@ -204,8 +285,8 @@ async def test_se_crean_todas_las_entidades(hass: HomeAssistant) -> None:
     registro = er.async_get(hass)
     entidades = er.async_entries_for_config_entry(registro, entry.entry_id)
 
-    assert sum(e.domain == "sensor" for e in entidades) == 11
-    assert sum(e.domain == "binary_sensor" for e in entidades) == 4
+    assert sum(e.domain == "sensor" for e in entidades) == 21
+    assert sum(e.domain == "binary_sensor" for e in entidades) == 5
 
 
 # --------------------------------------------------------------------------- #
@@ -565,10 +646,15 @@ async def test_payload_vacio_no_rompe_ninguna_entidad(hass: HomeAssistant) -> No
 
     Ninguna entidad puede petar por eso: como mucho quedan en "desconocido".
     """
-    await setup_integration(hass, {"contract_id": CONTRACT_ID})
+    await setup_integration(hass, {"contract_id": CONTRACT_ID}, calidad={})
 
     for state in hass.states.async_all():
-        assert state.state in (STATE_UNKNOWN, STATE_OFF), state.entity_id
+        if "calidad" in registro_unique_id(hass, state.entity_id):
+            # Sin parámetros en SINAC no hay dato que mostrar: no disponible,
+            # o desconocido el binario, que no depende de ningún parámetro.
+            assert state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN), state.entity_id
+        else:
+            assert state.state in (STATE_UNKNOWN, STATE_OFF), state.entity_id
 
 
 async def test_descarga_de_la_entrada(hass: HomeAssistant) -> None:
@@ -617,12 +703,19 @@ async def test_el_diagnostico_no_lleva_datos_personales(hass: HomeAssistant) -> 
             CONF_LATITUDE: 37.3891,
             CONF_LONGITUDE: -5.9845,
             CONF_INCIDENT_RADIUS: 1500,
+            CONF_RED_SINAC: "41091",
         },
     )
     entry.add_to_hass(hass)
-    with patch(
-        "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
-        return_value=DATOS,
+    with (
+        patch(
+            "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
+            return_value=DATOS,
+        ),
+        patch(
+            "custom_components.emasesa.calidad.EmasesaCalidadCoordinator._async_update_data",
+            return_value=CALIDAD,
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -644,5 +737,166 @@ async def test_el_diagnostico_no_lleva_datos_personales(hass: HomeAssistant) -> 
 
     # Y sigue sirviendo para diagnosticar.
     assert '"incident_radius_m": 1500' in volcado
+    assert '"red": "Sevilla"' in volcado
     assert '"total_m3": 443.601' in volcado
     assert "_water" in volcado
+
+
+# --------------------------------------------------------------------------- #
+# Calidad del agua (SINAC)
+# --------------------------------------------------------------------------- #
+async def test_sensores_de_calidad(hass: HomeAssistant) -> None:
+    await setup_integration(hass)
+
+    cloro = estado(hass, "sensor", "calidad_cloro_libre")
+    assert cloro.state == "0.8"
+    assert cloro.attributes["unit_of_measurement"] == "mg/L"
+    assert cloro.attributes["fecha_analisis"] == "2026-09-11"
+    assert cloro.attributes["red"] == "Sevilla"
+    assert cloro.attributes["codigo_sinac"] == "045"
+    assert cloro.attributes["state_class"] == "measurement"
+
+    ph = estado(hass, "sensor", "calidad_ph")
+    assert ph.state == "7.9"
+    assert ph.attributes["device_class"] == "ph"
+
+    conductividad = estado(hass, "sensor", "calidad_conductividad")
+    assert conductividad.state == "262.0"
+    assert conductividad.attributes["device_class"] == "conductivity"
+    assert conductividad.attributes["unit_of_measurement"] == "μS/cm"
+
+    assert estado(hass, "sensor", "calidad_dureza").state == "120.0"
+    assert estado(hass, "sensor", "calidad_turbidez").state == "0.2"
+
+
+async def test_los_parametros_secundarios_vienen_desactivados(
+    hass: HomeAssistant,
+) -> None:
+    entry = await setup_integration(hass)
+    registro = er.async_get(hass)
+    desactivadas = {
+        e.unique_id
+        for e in er.async_entries_for_config_entry(registro, entry.entry_id)
+        if e.disabled_by is not None
+    }
+
+    for key in ("nitrato", "sodio", "cloruro", "sulfato", "trihalometanos"):
+        assert f"{CONTRACT_ID}_calidad_{key}" in desactivadas
+    for key in ("cloro_libre", "dureza", "ph", "conductividad", "turbidez"):
+        assert f"{CONTRACT_ID}_calidad_{key}" not in desactivadas
+
+
+async def test_parametro_sin_notificar_queda_no_disponible(
+    hass: HomeAssistant,
+) -> None:
+    calidad = {**CALIDAD, "parametros": {}}
+    await setup_integration(hass, calidad=calidad)
+
+    assert estado(hass, "sensor", "calidad_cloro_libre").state == STATE_UNAVAILABLE
+
+
+async def test_agua_apta(hass: HomeAssistant) -> None:
+    await setup_integration(hass)
+
+    agua = estado(hass, "binary_sensor", "calidad_agua")
+    assert agua.state == STATE_OFF
+    assert agua.attributes["calificacion"] == "AGUA APTA PARA EL CONSUMO"
+    assert agua.attributes["fecha_analisis"] == "2026-09-11"
+
+
+async def test_agua_no_apta_es_un_problema(hass: HomeAssistant) -> None:
+    calidad = {
+        **CALIDAD,
+        "ultimo_control": {
+            "fecha": "2026-09-12",
+            "calificacion": "AGUA NO APTA PARA EL CONSUMO",
+        },
+    }
+    await setup_integration(hass, calidad=calidad)
+
+    assert estado(hass, "binary_sensor", "calidad_agua").state == STATE_ON
+
+
+async def test_sinac_caido_no_afecta_al_contrato(hass: HomeAssistant) -> None:
+    """SINAC es otra fuente: si falla, el contador sigue como si nada."""
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    await setup_integration(hass, calidad=UpdateFailed("SINAC no respondió"))
+
+    assert estado(hass, "sensor", "indice").state == "443.601"
+    assert estado(hass, "sensor", "calidad_cloro_libre").state == STATE_UNAVAILABLE
+    assert estado(hass, "binary_sensor", "calidad_agua").state == STATE_UNAVAILABLE
+
+
+async def test_sin_red_elegida_no_hay_calidad_y_se_pide(hass: HomeAssistant) -> None:
+    """Instalaciones de antes de la calidad del agua: se les pide la red.
+
+    No se supone ninguna. Hasta que se elija no se consulta SINAC ni se crean
+    entidades de calidad, y Reparaciones muestra un aviso para elegirla.
+    """
+    entry = await setup_integration(hass, opciones={})
+
+    unique_ids = {
+        e.unique_id
+        for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    }
+    assert not any("calidad" in u for u in unique_ids)
+    assert hass.data[DOMAIN][entry.entry_id].calidad is None
+
+    aviso = ir.async_get(hass).async_get_issue(
+        DOMAIN, f"elegir_red_sinac_{entry.entry_id}"
+    )
+    assert aviso is not None
+    assert aviso.is_fixable
+    assert aviso.data == {"entry_id": entry.entry_id}
+
+
+async def test_con_red_elegida_no_hay_aviso(hass: HomeAssistant) -> None:
+    entry = await setup_integration(hass)
+
+    assert (
+        ir.async_get(hass).async_get_issue(DOMAIN, f"elegir_red_sinac_{entry.entry_id}")
+        is None
+    )
+    assert hass.data[DOMAIN][entry.entry_id].calidad.id_red == "1374"
+
+
+async def test_la_reparacion_guarda_la_red_y_activa_la_calidad(
+    hass: HomeAssistant,
+) -> None:
+    from custom_components.emasesa.repairs import async_create_fix_flow
+
+    entry = await setup_integration(hass, opciones={CONF_INCIDENT_RADIUS: 1500})
+    issue_id = f"elegir_red_sinac_{entry.entry_id}"
+
+    flow = await async_create_fix_flow(hass, issue_id, {"entry_id": entry.entry_id})
+    flow.hass = hass
+    result = await flow.async_step_init()
+    assert result["type"] == "form"
+
+    with (
+        patch(
+            "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
+            return_value=DATOS,
+        ),
+        patch(
+            "custom_components.emasesa.calidad.EmasesaCalidadCoordinator._async_update_data",
+            return_value=CALIDAD,
+        ),
+    ):
+        result = await flow.async_step_init({CONF_RED_SINAC: "41021"})
+        await hass.async_block_till_done()
+
+    assert result["type"] == "create_entry"
+    # Se añade a las opciones que hubiera, sin pisarlas.
+    assert entry.options == {CONF_INCIDENT_RADIUS: 1500, CONF_RED_SINAC: "41021"}
+    # La recarga (listener de opciones) crea ya las entidades de calidad.
+    assert hass.data[DOMAIN][entry.entry_id].calidad.nombre_red == "Camas"
+    assert estado(hass, "sensor", "calidad_cloro_libre").state == "0.8"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_la_red_elegida_en_opciones_manda(hass: HomeAssistant) -> None:
+    entry = await setup_integration(hass, opciones={CONF_RED_SINAC: "41021"})
+
+    assert hass.data[DOMAIN][entry.entry_id].calidad.nombre_red == "Camas"
