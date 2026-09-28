@@ -148,24 +148,5 @@
         "name": "Calidad del agua"
       }
     }
-  },
-  "issues": {
-    "elegir_red_sinac": {
-      "title": "Elige la red de abastecimiento de {contrato}",
-      "fix_flow": {
-        "step": {
-          "red": {
-            "title": "Red de abastecimiento de {contrato}",
-            "description": "La integración de EMASESA ya puede mostrar la calidad del agua del grifo (cloro, dureza, pH, conductividad…) con los análisis que EMASESA notifica a SINAC. Para ello tienes que elegir la red de abastecimiento de tu suministro.",
-            "data": {
-              "red_sinac": "Red de abastecimiento"
-            }
-          }
-        },
-        "abort": {
-          "entry_not_found": "El contrato ya no existe."
-        }
-      }
-    }
   }
 }

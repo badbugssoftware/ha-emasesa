@@ -32,7 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def esquema_red(por_defecto: str | None = None) -> vol.Schema:
-    """Selector de red, común al alta, las opciones y la reparación."""
+    """Selector de red, común al alta y a las opciones."""
     redes = {
         codigo: nombre
         for codigo, (nombre, _) in sorted(REDES_SINAC.items(), key=lambda r: r[1][0])

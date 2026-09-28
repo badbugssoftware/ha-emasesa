@@ -178,7 +178,6 @@ custom_components/emasesa/
 ├── entity.py          # device_info compartido por todas las plataformas
 ├── sensor.py          # entidades sensor
 ├── manifest.json
-├── repairs.py         # aviso para elegir la red de SINAC en instalaciones previas
 ├── services.yaml      # definición de los servicios del dominio
 ├── strings.json       # textos del config flow, opciones y nombres de entidad
 └── translations/

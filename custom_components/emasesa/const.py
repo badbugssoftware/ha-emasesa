@@ -128,7 +128,6 @@ CALIDAD_INTERVAL_REINTENTO = timedelta(hours=2)
 # La elige quien instala: no se deduce de nada. Hasta que no hay una elegida
 # no se consulta SINAC ni se crean las entidades de calidad.
 CONF_RED_SINAC = "red_sinac"
-ISSUE_ELEGIR_RED = "elegir_red_sinac"
 REDES_SINAC: dict[str, tuple[str, str]] = {
     "41004": ("Alcalá de Guadaíra", "1376"),
     "41005": ("Alcalá del Río", "1366"),

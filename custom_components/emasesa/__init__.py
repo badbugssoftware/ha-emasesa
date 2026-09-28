@@ -21,7 +21,6 @@ from homeassistant.helpers import (
     config_validation as cv,
     device_registry as dr,
     entity_registry as er,
-    issue_registry as ir,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
@@ -40,7 +39,6 @@ from .const import (
     DEFAULT_INCIDENT_RADIUS,
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
-    ISSUE_ELEGIR_RED,
     OPCIONES_OBSOLETAS,
     PLATFORMS,
     REDES_SINAC,
@@ -111,29 +109,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 def _preparar_calidad(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> EmasesaCalidadCoordinator | None:
-    """Coordinator de SINAC para la red elegida, o un aviso para elegirla.
+    """Coordinator de SINAC para la red elegida, o None si no hay ninguna.
 
     La red la elige quien instala; no se deduce de la dirección. Las entradas
-    creadas antes de que existiera la calidad del agua no tienen ninguna, así
-    que se les pide desde Reparaciones en vez de suponer una. Hasta entonces no
-    se consulta SINAC ni se crean las entidades de calidad.
+    creadas antes de que existiera la calidad del agua no tienen ninguna: hasta
+    que se elija en las opciones no se consulta SINAC ni se crean las entidades
+    de calidad.
     """
-    issue_id = f"{ISSUE_ELEGIR_RED}_{entry.entry_id}"
     red = entry.options.get(CONF_RED_SINAC)
     if red in REDES_SINAC:
-        ir.async_delete_issue(hass, DOMAIN, issue_id)
         return EmasesaCalidadCoordinator(hass, red)
-    ir.async_create_issue(
-        hass,
-        DOMAIN,
-        issue_id,
-        is_fixable=True,
-        is_persistent=False,
-        severity=ir.IssueSeverity.WARNING,
-        translation_key=ISSUE_ELEGIR_RED,
-        translation_placeholders={"contrato": entry.title},
-        data={"entry_id": entry.entry_id},
-    )
     return None
 
 
@@ -262,11 +247,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         return True
     return False
-
-
-async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Al borrar el contrato, su aviso de elegir red ya no tiene sentido."""
-    ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_ELEGIR_RED}_{entry.entry_id}")
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

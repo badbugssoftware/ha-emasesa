@@ -148,24 +148,5 @@
         "name": "Water quality"
       }
     }
-  },
-  "issues": {
-    "elegir_red_sinac": {
-      "title": "Choose the supply network for {contrato}",
-      "fix_flow": {
-        "step": {
-          "red": {
-            "title": "Supply network for {contrato}",
-            "description": "The EMASESA integration can now show your tap water quality (chlorine, hardness, pH, conductivity…) from the reports EMASESA files with SINAC. To enable it, choose your supply network.",
-            "data": {
-              "red_sinac": "Supply network"
-            }
-          }
-        },
-        "abort": {
-          "entry_not_found": "The contract no longer exists."
-        }
-      }
-    }
   }
 }
