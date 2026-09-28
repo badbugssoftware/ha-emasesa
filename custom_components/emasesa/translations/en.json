@@ -154,7 +154,7 @@
       "title": "Choose the supply network for {contrato}",
       "fix_flow": {
         "step": {
-          "init": {
+          "red": {
             "title": "Supply network for {contrato}",
             "description": "The EMASESA integration can now show your tap water quality (chlorine, hardness, pH, conductivity…) from the reports EMASESA files with SINAC. To enable it, choose your supply network.",
             "data": {

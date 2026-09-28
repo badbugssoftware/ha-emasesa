@@ -27,6 +27,14 @@ class ElegirRedFlow(RepairsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> data_entry_flow.FlowResult:
+        # Home Assistant abre el flujo con {"issue_id": ...} como user_input,
+        # no con None: el formulario va en un paso aparte para no confundir
+        # esa entrada con la red elegida.
+        return await self.async_step_red()
+
+    async def async_step_red(
+        self, user_input: dict[str, Any] | None = None
+    ) -> data_entry_flow.FlowResult:
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         if entry is None:
             # El contrato se borró con el aviso abierto: nada que arreglar.
@@ -38,7 +46,7 @@ class ElegirRedFlow(RepairsFlow):
             )
             return self.async_create_entry(data={})
         return self.async_show_form(
-            step_id="init",
+            step_id="red",
             data_schema=esquema_red(),
             description_placeholders={"contrato": entry.title},
         )

@@ -862,17 +862,27 @@ async def test_con_red_elegida_no_hay_aviso(hass: HomeAssistant) -> None:
 
 
 async def test_la_reparacion_guarda_la_red_y_activa_la_calidad(
-    hass: HomeAssistant,
+    hass: HomeAssistant, hass_client
 ) -> None:
-    from custom_components.emasesa.repairs import async_create_fix_flow
+    """Por la API de Reparaciones, igual que al pulsar el aviso en la interfaz.
 
+    Home Assistant abre el flujo con {"issue_id": ...} como primera entrada:
+    llamar al paso a mano, sin argumentos, no detecta si se confunde con la red.
+    """
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(hass, "repairs", {})
     entry = await setup_integration(hass, opciones={CONF_INCIDENT_RADIUS: 1500})
     issue_id = f"elegir_red_sinac_{entry.entry_id}"
+    client = await hass_client()
 
-    flow = await async_create_fix_flow(hass, issue_id, {"entry_id": entry.entry_id})
-    flow.hass = hass
-    result = await flow.async_step_init()
+    resp = await client.post(
+        "/api/repairs/issues/fix", json={"handler": DOMAIN, "issue_id": issue_id}
+    )
+    assert resp.status == 200
+    result = await resp.json()
     assert result["type"] == "form"
+    assert result["step_id"] == "red"
 
     with (
         patch(
@@ -884,7 +894,12 @@ async def test_la_reparacion_guarda_la_red_y_activa_la_calidad(
             return_value=CALIDAD,
         ),
     ):
-        result = await flow.async_step_init({CONF_RED_SINAC: "41021"})
+        resp = await client.post(
+            f"/api/repairs/issues/fix/{result['flow_id']}",
+            json={CONF_RED_SINAC: "41021"},
+        )
+        assert resp.status == 200
+        result = await resp.json()
         await hass.async_block_till_done()
 
     assert result["type"] == "create_entry"
