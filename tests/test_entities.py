@@ -828,12 +828,11 @@ async def test_sinac_caido_no_afecta_al_contrato(hass: HomeAssistant) -> None:
     assert estado(hass, "binary_sensor", "calidad_agua").state == STATE_UNAVAILABLE
 
 
-async def test_sin_red_elegida_no_hay_calidad_ni_avisos(hass: HomeAssistant) -> None:
-    """Instalaciones de antes de la calidad del agua: no se supone ninguna red.
+async def test_sin_red_elegida_no_hay_calidad_y_se_pide(hass: HomeAssistant) -> None:
+    """Instalaciones de antes de la calidad del agua: se les pide la red.
 
-    Hasta que se elija en las opciones no se consulta SINAC ni se crean
-    entidades de calidad. Y sin avisos en Reparaciones: la integración no
-    los usa.
+    No se supone ninguna. Hasta que se elija no se consulta SINAC ni se crean
+    entidades de calidad, y Reparaciones muestra un aviso para elegirla.
     """
     entry = await setup_integration(hass, opciones={})
 
@@ -843,25 +842,48 @@ async def test_sin_red_elegida_no_hay_calidad_ni_avisos(hass: HomeAssistant) -> 
     }
     assert not any("calidad" in u for u in unique_ids)
     assert hass.data[DOMAIN][entry.entry_id].calidad is None
-    assert not [
-        i for (dominio, _), i in ir.async_get(hass).issues.items() if dominio == DOMAIN
-    ]
+
+    aviso = ir.async_get(hass).async_get_issue(
+        DOMAIN, f"elegir_red_sinac_{entry.entry_id}"
+    )
+    assert aviso is not None
+    assert aviso.is_fixable
+    assert aviso.data == {"entry_id": entry.entry_id}
 
 
-async def test_con_red_elegida_se_consulta_esa_red(hass: HomeAssistant) -> None:
+async def test_con_red_elegida_no_hay_aviso(hass: HomeAssistant) -> None:
     entry = await setup_integration(hass)
 
+    assert (
+        ir.async_get(hass).async_get_issue(DOMAIN, f"elegir_red_sinac_{entry.entry_id}")
+        is None
+    )
     assert hass.data[DOMAIN][entry.entry_id].calidad.id_red == "1374"
 
 
-async def test_elegir_la_red_en_configurar_activa_la_calidad(
-    hass: HomeAssistant,
+async def test_la_reparacion_guarda_la_red_y_activa_la_calidad(
+    hass: HomeAssistant, hass_client
 ) -> None:
-    """Quien ya la tenía instalada elige la red en Configurar y listo."""
-    entry = await setup_integration(hass, opciones={CONF_INCIDENT_RADIUS: 1500})
-    assert hass.data[DOMAIN][entry.entry_id].calidad is None
+    """Por la API de Reparaciones, igual que al pulsar el aviso en la interfaz.
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    Home Assistant abre el flujo con {"issue_id": ...} como primera entrada:
+    llamar al paso a mano, sin argumentos, no detecta si se confunde con la red.
+    """
+    from homeassistant.setup import async_setup_component
+
+    assert await async_setup_component(hass, "repairs", {})
+    entry = await setup_integration(hass, opciones={CONF_INCIDENT_RADIUS: 1500})
+    issue_id = f"elegir_red_sinac_{entry.entry_id}"
+    client = await hass_client()
+
+    resp = await client.post(
+        "/api/repairs/issues/fix", json={"handler": DOMAIN, "issue_id": issue_id}
+    )
+    assert resp.status == 200
+    result = await resp.json()
+    assert result["type"] == "form"
+    assert result["step_id"] == "red"
+
     with (
         patch(
             "custom_components.emasesa.coordinator.EmasesaCoordinator._async_update_data",
@@ -872,15 +894,21 @@ async def test_elegir_la_red_en_configurar_activa_la_calidad(
             return_value=CALIDAD,
         ),
     ):
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {CONF_INCIDENT_RADIUS: 1500, CONF_RED_SINAC: "41021"}
+        resp = await client.post(
+            f"/api/repairs/issues/fix/{result['flow_id']}",
+            json={CONF_RED_SINAC: "41021"},
         )
+        assert resp.status == 200
+        result = await resp.json()
         await hass.async_block_till_done()
 
     assert result["type"] == "create_entry"
+    # Se añade a las opciones que hubiera, sin pisarlas.
+    assert entry.options == {CONF_INCIDENT_RADIUS: 1500, CONF_RED_SINAC: "41021"}
     # La recarga (listener de opciones) crea ya las entidades de calidad.
     assert hass.data[DOMAIN][entry.entry_id].calidad.nombre_red == "Camas"
     assert estado(hass, "sensor", "calidad_cloro_libre").state == "0.8"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
 async def test_la_red_elegida_en_opciones_manda(hass: HomeAssistant) -> None:

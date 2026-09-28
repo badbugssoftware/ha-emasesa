@@ -351,9 +351,10 @@ Todo se hace desde la interfaz; no hay nada que poner en `configuration.yaml`.
    | --- |
    | Alcalá de Guadaíra · Alcalá del Río · Camas · Coria del Río · Dos Hermanas · El Garrobo · El Ronquillo · La Puebla del Río · La Rinconada · Mairena del Alcor · San Juan de Aznalfarache · Sevilla |
 
-> **¿Ya tenías la integración instalada?** Elige la red en la tarjeta de la integración,
-> **Configurar → Red de abastecimiento**, y los sensores de calidad aparecen solos.
-> Mientras no la elijas, todo lo demás sigue funcionando igual.
+> **¿Ya tenías la integración instalada?** Al actualizar, cada contrato aparece en
+> **Ajustes → Sistema → Reparaciones** con el aviso *Elige la red de abastecimiento*.
+> Pulsa en él, elige tu municipio y los sensores de calidad aparecen solos. Mientras no la
+> elijas, todo lo demás sigue funcionando igual.
 
 Puedes **repetir el proceso** para añadir más contratos: cada uno se crea como una entrada
 independiente, con su propio dispositivo y sus propias estadísticas.
