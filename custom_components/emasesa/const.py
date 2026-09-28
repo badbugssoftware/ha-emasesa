@@ -108,14 +108,18 @@ SINAC_DETALLE_URL = (
     "https://sinac.sanidad.gob.es/CiudadanoWeb/ciudadano/"
     "informacionAbastecimientoActionDetalleRed.do"
 )
-# SINAC tarda unos 30 s en generar la ficha de una red, y la de Sevilla, la
-# más grande, ha llegado a pasar de dos minutos (medido en septiembre de 2026).
-# Como la consulta va en segundo plano, esperar de más no molesta a nadie.
-SINAC_TIMEOUT = 240
+# SINAC tarda unos 30 s en generar la ficha de una red, pero la de Sevilla, la
+# más grande, tarda cerca de cuatro minutos (223 y 239 s medidos en septiembre
+# de 2026). Como la consulta va en segundo plano, esperar de más no molesta a
+# nadie; quedarse corto deja sin datos a la red con más usuarios.
+SINAC_TIMEOUT = 600
 # Una consulta al día. Los análisis de control se toman 2 o 3 veces por semana
 # y llegan a SINAC con más de una semana de retraso; los completos, una vez al
 # mes. Mirar más a menudo no adelanta nada.
 CALIDAD_INTERVAL = timedelta(hours=24)
+# Si SINAC falla, se reintenta antes: esperar al día siguiente dejaría los
+# sensores de calidad no disponibles 24 h por un fallo puntual.
+CALIDAD_INTERVAL_REINTENTO = timedelta(hours=2)
 
 # Redes de abastecimiento de EMASESA en SINAC: código INE del municipio ->
 # (nombre, id de la red). Son identificadores del propio SINAC y no cambian;

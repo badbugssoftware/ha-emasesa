@@ -20,7 +20,13 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import EmasesaError, get_sinac_detail, parse_sinac_detail
-from .const import CALIDAD_INTERVAL, CONF_RED_SINAC, DOMAIN, REDES_SINAC
+from .const import (
+    CALIDAD_INTERVAL,
+    CALIDAD_INTERVAL_REINTENTO,
+    CONF_RED_SINAC,
+    DOMAIN,
+    REDES_SINAC,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +65,8 @@ class EmasesaCalidadCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             datos = parse_sinac_detail(page)
         except EmasesaError as err:
+            self.update_interval = CALIDAD_INTERVAL_REINTENTO
             raise UpdateFailed(str(err)) from err
+        self.update_interval = CALIDAD_INTERVAL
         datos["red"] = self.nombre_red
         return datos

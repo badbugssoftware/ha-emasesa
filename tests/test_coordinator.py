@@ -1100,3 +1100,40 @@ async def test_un_fallo_al_renovar_no_tumba_el_ciclo(coordinator):
     await coordinator._renovar_confianza()
 
     assert coordinator._ultima_renovacion is None
+
+
+# --------------------------------------------------------------------------- #
+# Calidad del agua (SINAC): reintento tras un fallo
+# --------------------------------------------------------------------------- #
+async def test_calidad_reintenta_antes_si_sinac_falla(hass, monkeypatch) -> None:
+    """Un fallo puntual de SINAC no deja la calidad sin datos 24 h."""
+    from custom_components.emasesa import calidad as calidad_module
+    from custom_components.emasesa.api import EmasesaError
+    from custom_components.emasesa.const import (
+        CALIDAD_INTERVAL,
+        CALIDAD_INTERVAL_REINTENTO,
+    )
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    coord = calidad_module.EmasesaCalidadCoordinator(hass, "41091")
+    assert coord.update_interval == CALIDAD_INTERVAL
+
+    monkeypatch.setattr(
+        calidad_module,
+        "get_sinac_detail",
+        AsyncMock(side_effect=EmasesaError("SINAC no respondió a tiempo")),
+    )
+    with pytest.raises(UpdateFailed):
+        await coord._async_update_data()
+    assert coord.update_interval == CALIDAD_INTERVAL_REINTENTO
+
+    # Cuando vuelve a responder, recupera el ritmo diario.
+    monkeypatch.setattr(calidad_module, "get_sinac_detail", AsyncMock(return_value=""))
+    monkeypatch.setattr(
+        calidad_module,
+        "parse_sinac_detail",
+        lambda _page: {"parametros": {}, "ultimo_control": None},
+    )
+    datos = await coord._async_update_data()
+    assert datos["red"] == "Sevilla"
+    assert coord.update_interval == CALIDAD_INTERVAL

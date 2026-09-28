@@ -168,9 +168,10 @@ atributo `fecha_analisis`: el cloro, el pH o la conductividad se analizan varias
 semana, y la dureza o los nitratos, unas pocas al año. Si tu red no tiene notificado un
 parámetro, su sensor queda **no disponible**.
 
-> SINAC es lento: la ficha de una red tarda en torno a **30 segundos** en generarse. Por
-> eso se consulta en segundo plano y los sensores de calidad aparecen un rato después de
-> arrancar Home Assistant. Si SINAC falla, el resto de la integración no se entera.
+> SINAC es lento: la ficha de una red tarda en torno a **30 segundos** en generarse, y la
+> de Sevilla, cerca de **cuatro minutos**. Por eso se consulta en segundo plano y los
+> sensores de calidad aparecen un rato después de arrancar Home Assistant. Si SINAC falla,
+> se reintenta a las 2 horas, y el resto de la integración no se entera.
 
 ### Sensores binarios
 
