@@ -34,6 +34,7 @@ from custom_components.emasesa.const import (
     CONF_LONGITUDE,
     CONF_PASSWORD,
     CONF_SUPPLY_ADDRESS,
+    CONF_UBICACION_CONFIRMADA,
     CONF_USERNAME,
     DOMAIN,
 )
@@ -150,6 +151,27 @@ async def start_user_flow(hass: HomeAssistant) -> dict[str, Any]:
 CREDENCIALES = {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD}
 
 
+SEVILLA = {"latitude": 37.3891, "longitude": -5.9845}
+DOS_HERMANAS = {"latitude": 37.283, "longitude": -5.922}
+TOMARES = {"latitude": 37.375, "longitude": -6.045}  # lo abastece Aljarafesa
+
+
+async def marcar_ubicacion(
+    hass: HomeAssistant, result: dict[str, Any], punto: dict[str, float] | None = None
+) -> dict[str, Any]:
+    """Completa el paso del mapa si el flujo ha llegado a él.
+
+    Es el último paso del alta, así que casi todos los tests pasan por aquí;
+    si el flujo ha acabado de otra forma (error, aborto), no toca nada.
+    """
+    if result["type"] is FlowResultType.FORM and result["step_id"] == "ubicacion":
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"ubicacion": punto or SEVILLA}
+        )
+        await hass.async_block_till_done()
+    return result
+
+
 # --------------------------------------------------------------------------- #
 # normalize_username
 # --------------------------------------------------------------------------- #
@@ -183,6 +205,7 @@ async def test_alta_con_un_solo_contrato(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "EMASESA 0012345678"
     assert result["data"][CONF_USERNAME] == USERNAME
@@ -209,6 +232,7 @@ async def test_alta_normaliza_el_documento(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["data"][CONF_USERNAME] == "12345678Z"
     # Y al cliente se le pasa ya normalizado, no lo que tecleó el usuario.
     assert ctor.call_args.args[1] == "12345678Z"
@@ -239,6 +263,7 @@ async def test_alta_sigue_aunque_falle_el_registro_de_confianza(
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -264,6 +289,7 @@ async def test_alta_credenciales_invalidas_y_reintento(hass: HomeAssistant) -> N
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -342,6 +368,7 @@ async def test_2fa_camino_completo(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     # El PIN se manda sin espacios: copiar/pegar del SMS los arrastra.
     assert client.login.await_args.kwargs["pin"] == "123456"
@@ -376,6 +403,7 @@ async def test_2fa_pin_incorrecto_y_reintento(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -400,6 +428,7 @@ async def test_2fa_al_pedir_los_contratos(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -441,6 +470,7 @@ async def test_seleccion_de_contrato(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_CONTRACT_ID] == "9988776"
     assert result["title"] == "EMASESA 0087654321"
@@ -505,6 +535,7 @@ async def test_reutiliza_el_dispositivo_del_mismo_usuario(
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["data"][CONF_DEVICE_ID] == "dispositivo-de-confianza"
     assert ctor.call_args.args[3] == "dispositivo-de-confianza"
 
@@ -526,6 +557,7 @@ async def test_no_reutiliza_el_dispositivo_de_otro_usuario(
         )
         await hass.async_block_till_done()
 
+    result = await marcar_ubicacion(hass, result)
     assert result["data"][CONF_DEVICE_ID] != "de-otro"
 
 
@@ -705,6 +737,8 @@ async def test_opciones_guardan_la_ubicacion_plana(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
+    # Guardar las opciones es también marcar el suministro en el mapa.
+    assert entry.options[CONF_UBICACION_CONFIRMADA] is True
     assert entry.options[CONF_INCIDENT_RADIUS] == 2500
     assert entry.options[CONF_LATITUDE] == 37.3891
     assert entry.options[CONF_LONGITUDE] == -5.9845
@@ -755,7 +789,7 @@ async def test_se_retiran_las_opciones_de_intervalo_antiguas(
         options={
             "scan_minutes": 45,
             "scan_hours": 3,
-            # La red ya no se elige: sale de la ubicación (0.8.3).
+            # La red ya no se elige en una lista: sale del mapa (0.8.3).
             "red_sinac": "41004",
             CONF_INCIDENT_RADIUS: 2500,
         },
@@ -767,14 +801,11 @@ async def test_se_retiran_las_opciones_de_intervalo_antiguas(
 
 
 # --------------------------------------------------------------------------- #
-# Red de abastecimiento (calidad del agua)
+# Ubicación del suministro (de ella sale la red del análisis del agua)
 # --------------------------------------------------------------------------- #
-async def test_alta_no_pregunta_la_red(hass: HomeAssistant) -> None:
-    """La red sale de la ubicación del suministro: en el alta no se elige nada.
-
-    Una lista obligatoria llega con la primera opción marcada, y era fácil
-    quedarse con «Alcalá de Guadaíra» sin darse cuenta.
-    """
+async def test_alta_pide_marcar_el_suministro_en_el_mapa(hass: HomeAssistant) -> None:
+    """El mapa llega con la ubicación de Home Assistant, y se guarda la marcada."""
+    hass.config.latitude, hass.config.longitude = 37.3826, -5.9963
     client = make_client()
     result = await start_user_flow(hass)
 
@@ -782,7 +813,50 @@ async def test_alta_no_pregunta_la_red(hass: HomeAssistant) -> None:
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], CREDENCIALES
         )
-        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "ubicacion"
+    campo = next(k for k in result["data_schema"].schema if str(k) == "ubicacion")
+    assert campo.default() == {"latitude": 37.3826, "longitude": -5.9963}
+
+    with patch_client(client):
+        result = await marcar_ubicacion(hass, result, DOS_HERMANAS)
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["options"] == {}
+    assert result["options"] == {
+        CONF_LATITUDE: DOS_HERMANAS["latitude"],
+        CONF_LONGITUDE: DOS_HERMANAS["longitude"],
+        CONF_UBICACION_CONFIRMADA: True,
+    }
+
+
+async def test_alta_no_acepta_un_punto_fuera_de_emasesa(hass: HomeAssistant) -> None:
+    """Fuera de sus doce municipios no hay red: se avisa y se deja corregir."""
+    client = make_client()
+    result = await start_user_flow(hass)
+
+    with patch_client(client):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], CREDENCIALES
+        )
+        result = await marcar_ubicacion(hass, result, TOMARES)
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "ubicacion"
+        assert result["errors"] == {"base": "fuera_de_emasesa"}
+
+        result = await marcar_ubicacion(hass, result, SEVILLA)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_opciones_no_aceptan_un_punto_fuera_de_emasesa(
+    hass: HomeAssistant,
+) -> None:
+    entry = _entrada_existente(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"ubicacion": TOMARES, CONF_INCIDENT_RADIUS: 1000}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "fuera_de_emasesa"}
+    assert CONF_UBICACION_CONFIRMADA not in entry.options

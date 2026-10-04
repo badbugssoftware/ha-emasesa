@@ -35,11 +35,12 @@ from .const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_PASSWORD,
+    CONF_UBICACION_CONFIRMADA,
     CONF_USERNAME,
     DEFAULT_INCIDENT_RADIUS,
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
-    ISSUE_UBICACION_SIN_RED,
+    ISSUE_MARCAR_SUMINISTRO,
     OPCIONES_OBSOLETAS,
     PLATFORMS,
     REDES_SINAC,
@@ -112,30 +113,33 @@ async def _preparar_calidad(
 ) -> EmasesaCalidadCoordinator | None:
     """Coordinator de SINAC para la red que abastece al suministro.
 
-    La red es la del municipio en el que está el suministro: su ubicación en
-    las opciones o, si no se ha tocado, la de Home Assistant. Si cae fuera de
-    los municipios de EMASESA no hay calidad del agua y se avisa en
-    Reparaciones, porque lo normal es que la ubicación esté mal puesta.
+    La red es la del municipio en el que está el suministro, y eso sólo se da
+    por bueno cuando alguien lo ha marcado en el mapa. Mientras no, no hay
+    calidad del agua y se pide desde Reparaciones: enseñar el análisis del
+    municipio de Home Assistant, que puede no ser el del suministro, sería
+    peor que no enseñar ninguno.
     """
-    limites = await hass.async_add_executor_job(cargar_limites)
-    red = red_de(
-        entry.options.get(CONF_LATITUDE, hass.config.latitude),
-        entry.options.get(CONF_LONGITUDE, hass.config.longitude),
-        limites,
-    )
-    issue_id = f"{ISSUE_UBICACION_SIN_RED}_{entry.entry_id}"
-    if red in REDES_SINAC:
-        ir.async_delete_issue(hass, DOMAIN, issue_id)
-        return EmasesaCalidadCoordinator(hass, red)
+    issue_id = f"{ISSUE_MARCAR_SUMINISTRO}_{entry.entry_id}"
+    if entry.options.get(CONF_UBICACION_CONFIRMADA):
+        limites = await hass.async_add_executor_job(cargar_limites)
+        red = red_de(
+            entry.options.get(CONF_LATITUDE),
+            entry.options.get(CONF_LONGITUDE),
+            limites,
+        )
+        if red in REDES_SINAC:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            return EmasesaCalidadCoordinator(hass, red)
     ir.async_create_issue(
         hass,
         DOMAIN,
         issue_id,
-        is_fixable=False,
+        is_fixable=True,
         is_persistent=False,
         severity=ir.IssueSeverity.WARNING,
-        translation_key=ISSUE_UBICACION_SIN_RED,
+        translation_key=ISSUE_MARCAR_SUMINISTRO,
         translation_placeholders={"contrato": entry.title},
+        data={"entry_id": entry.entry_id},
     )
     return None
 
@@ -268,8 +272,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Al borrar el contrato, su aviso de ubicación ya no tiene sentido."""
-    ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_UBICACION_SIN_RED}_{entry.entry_id}")
+    """Al borrar el contrato, su aviso de marcar el suministro ya no tiene sentido."""
+    ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_MARCAR_SUMINISTRO}_{entry.entry_id}")
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

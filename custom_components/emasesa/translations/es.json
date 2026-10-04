@@ -22,6 +22,13 @@
           "contrato_id": "Contrato / punto de suministro"
         }
       },
+      "ubicacion": {
+        "title": "¿Dónde está el suministro?",
+        "description": "Marca en el mapa dónde está este suministro. Sirve para mostrarte el **análisis del agua del grifo** (cloro, dureza, pH…), que es distinto en cada municipio, y las incidencias de la red cercanas. El punto no sale de tu Home Assistant.",
+        "data": {
+          "ubicacion": "Ubicación del suministro"
+        }
+      },
       "reauth_confirm": {
         "title": "Volver a autenticar",
         "description": "La sesión de EMASESA ha caducado. Introduce de nuevo tu contraseña.",
@@ -40,7 +47,8 @@
     "error": {
       "invalid_auth": "Usuario o contraseña incorrectos.",
       "invalid_pin": "Código de verificación incorrecto.",
-      "cannot_connect": "No se pudo conectar con EMASESA."
+      "cannot_connect": "No se pudo conectar con EMASESA.",
+      "fuera_de_emasesa": "Ese punto no está en ningún municipio abastecido por EMASESA. Marca en el mapa dónde está el suministro."
     },
     "abort": {
       "already_configured": "Este contrato ya está configurado.",
@@ -57,9 +65,12 @@
           "ubicacion": "Ubicación del suministro"
         },
         "data_description": {
-          "ubicacion": "Dónde está este suministro. Por defecto, la ubicación de Home Assistant; cámbiala si el contrato es de otra vivienda o de un local. De ella salen las incidencias cercanas y la red de abastecimiento (el municipio) de la que se muestra la calidad del agua."
+          "ubicacion": "Dónde está este suministro. De aquí salen el análisis del agua, que es el del municipio en el que cae el punto, y las incidencias cercanas. Cámbiala si el contrato es de otra vivienda o de un local."
         }
       }
+    },
+    "error": {
+      "fuera_de_emasesa": "Ese punto no está en ningún municipio abastecido por EMASESA. Marca en el mapa dónde está el suministro."
     }
   },
   "entity": {
@@ -141,9 +152,25 @@
     }
   },
   "issues": {
-    "ubicacion_sin_red": {
-      "title": "La ubicación de {contrato} no está en un municipio de EMASESA",
-      "description": "La calidad del agua se toma de la red de abastecimiento del municipio en el que está el suministro, y la ubicación configurada no cae en ninguno de los que abastece EMASESA. Lo normal es que la ubicación no esté bien puesta: corrígela en **Ajustes → Dispositivos y servicios → EMASESA → Configurar**. Mientras tanto no se muestran los sensores de calidad del agua; todo lo demás funciona igual."
+    "marcar_suministro": {
+      "title": "Marca dónde está el suministro de {contrato} para ver el análisis del agua",
+      "fix_flow": {
+        "step": {
+          "ubicacion": {
+            "title": "Análisis del agua de {contrato}",
+            "description": "La integración de EMASESA ya puede mostrar el **análisis del agua del grifo** (cloro, dureza, pH, conductividad…) con los datos que EMASESA notifica al Ministerio de Sanidad.\n\nEl análisis es distinto en cada municipio, así que hace falta saber **dónde está este suministro**. Marca el punto en el mapa: la ubicación de Home Assistant viene puesta, pero muévela si el contrato es de otra vivienda. El punto no sale de tu Home Assistant.",
+            "data": {
+              "ubicacion": "Ubicación del suministro"
+            }
+          }
+        },
+        "error": {
+          "fuera_de_emasesa": "Ese punto no está en ningún municipio abastecido por EMASESA. Marca en el mapa dónde está el suministro."
+        },
+        "abort": {
+          "entry_not_found": "El contrato ya no existe."
+        }
+      }
     }
   }
 }

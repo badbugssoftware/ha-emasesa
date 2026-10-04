@@ -125,10 +125,14 @@ CALIDAD_INTERVAL_REINTENTO = timedelta(hours=2)
 # (nombre, id de la red). Son identificadores del propio SINAC y no cambian;
 # sacados recorriendo todos los municipios de la provincia de Sevilla y
 # quedándose con las redes cuyo gestor es EMASESA.
-# La red de un suministro es la del municipio en el que está (ver redes.py).
-# Si su ubicación cae fuera de todos, no se consulta SINAC ni se crean las
-# entidades de calidad, y se avisa para que se revise la ubicación.
-ISSUE_UBICACION_SIN_RED = "ubicacion_sin_red"
+# La red de un suministro es la del municipio en el que está (ver redes.py),
+# y dónde está lo marca en el mapa quien instala: la ubicación de Home
+# Assistant no tiene por qué ser la del suministro, y fiarse de ella enseñaría
+# el análisis de otro municipio sin que nadie lo notara. Hasta que no se marca
+# (en el alta, en las opciones o desde el aviso de Reparaciones) no se consulta
+# SINAC ni se crean las entidades de calidad.
+CONF_UBICACION_CONFIRMADA = "ubicacion_confirmada"
+ISSUE_MARCAR_SUMINISTRO = "marcar_suministro"
 REDES_SINAC: dict[str, tuple[str, str]] = {
     "41004": ("Alcalá de Guadaíra", "1376"),
     "41005": ("Alcalá del Río", "1366"),

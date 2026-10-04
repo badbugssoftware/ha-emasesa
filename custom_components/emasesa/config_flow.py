@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -15,7 +16,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import LocationSelector
 
@@ -34,12 +35,14 @@ from .const import (
     CONF_LONGITUDE,
     CONF_PASSWORD,
     CONF_SUPPLY_ADDRESS,
+    CONF_UBICACION_CONFIRMADA,
     CONF_USERNAME,
     DEFAULT_INCIDENT_RADIUS,
     DOMAIN,
     MAX_INCIDENT_RADIUS,
     MIN_INCIDENT_RADIUS,
 )
+from .redes import cargar_limites, red_de
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +62,43 @@ def normalize_username(value: str) -> str:
     return re.sub(r"[\s.\-_/]", "", value or "").upper()
 
 
+def esquema_ubicacion(
+    hass: HomeAssistant, opciones: Mapping[str, Any] | None = None
+) -> dict[vol.Marker, Any]:
+    """El mapa para marcar el suministro, común al alta, las opciones y la reparación.
+
+    Se propone la ubicación ya guardada o, si no hay, la de Home Assistant;
+    quien instala la confirma o la mueve.
+    """
+    opciones = opciones or {}
+    ubicacion = {
+        "latitude": opciones.get(CONF_LATITUDE, hass.config.latitude),
+        "longitude": opciones.get(CONF_LONGITUDE, hass.config.longitude),
+    }
+    return {vol.Required("ubicacion", default=ubicacion): LocationSelector()}
+
+
+async def ubicacion_marcada(
+    hass: HomeAssistant, ubicacion: Any
+) -> dict[str, Any] | None:
+    """Opciones que guardan el punto marcado, o None si no es de EMASESA.
+
+    EMASESA sólo abastece a doce municipios: un punto fuera de ellos es un
+    mapa mal marcado, y sin municipio no hay red de la que sacar el análisis.
+    """
+    if not isinstance(ubicacion, dict):
+        return None
+    latitud, longitud = ubicacion.get("latitude"), ubicacion.get("longitude")
+    limites = await hass.async_add_executor_job(cargar_limites)
+    if red_de(latitud, longitud, limites) is None:
+        return None
+    return {
+        CONF_LATITUDE: latitud,
+        CONF_LONGITUDE: longitud,
+        CONF_UBICACION_CONFIRMADA: True,
+    }
+
+
 class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config flow: usuario/contraseña, doble factor y selección de contrato."""
 
@@ -68,6 +108,7 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
         self._client: EmasesaClient | None = None
         self._data: dict[str, Any] = {}
         self._contracts: list[dict[str, Any]] = []
+        self._contract: dict[str, Any] = {}
         self._reauth_password: str | None = None
         self._reauth_device_id: str | None = None
 
@@ -211,6 +252,28 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
         contract_id = str(contract.get("contratos_id"))
         await self.async_set_unique_id(contract_id)
         self._abort_if_unique_id_configured()
+        self._contract = contract
+        return await self.async_step_ubicacion()
+
+    async def async_step_ubicacion(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Dónde está el suministro: de ahí sale la red del análisis del agua."""
+        errors: dict[str, str] = {}
+        opciones = None
+        if user_input is not None:
+            opciones = await ubicacion_marcada(self.hass, user_input.get("ubicacion"))
+            if opciones is None:
+                errors["base"] = "fuera_de_emasesa"
+        if opciones is None:
+            return self.async_show_form(
+                step_id="ubicacion",
+                data_schema=vol.Schema(esquema_ubicacion(self.hass)),
+                errors=errors,
+            )
+
+        contract = self._contract
+        contract_id = str(contract.get("contratos_id"))
         address = contract.get("direccion_suministro", "")
         number = contract.get("numero_contrato") or contract_id
         return self.async_create_entry(
@@ -221,6 +284,7 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_CONTRACT_NUMBER: number,
                 CONF_SUPPLY_ADDRESS: address,
             },
+            options=opciones,
         )
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
@@ -334,36 +398,28 @@ class EmasesaOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
             # El selector de ubicación devuelve un dict; se guarda plano.
             datos = dict(user_input)
-            ubicacion = datos.pop("ubicacion", None)
-            if isinstance(ubicacion, dict):
-                datos[CONF_LATITUDE] = ubicacion.get("latitude")
-                datos[CONF_LONGITUDE] = ubicacion.get("longitude")
-            return self.async_create_entry(title="", data=datos)
+            marcada = await ubicacion_marcada(self.hass, datos.pop("ubicacion", None))
+            if marcada is not None:
+                return self.async_create_entry(title="", data={**datos, **marcada})
+            errors["base"] = "fuera_de_emasesa"
 
         radius = self.config_entry.options.get(
             CONF_INCIDENT_RADIUS, DEFAULT_INCIDENT_RADIUS
         )
-        # Por defecto, la ubicación de Home Assistant.
-        ubicacion = {
-            "latitude": self.config_entry.options.get(
-                CONF_LATITUDE, self.hass.config.latitude
-            ),
-            "longitude": self.config_entry.options.get(
-                CONF_LONGITUDE, self.hass.config.longitude
-            ),
-        }
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Optional("ubicacion", default=ubicacion): LocationSelector(),
+                    **esquema_ubicacion(self.hass, self.config_entry.options),
                     vol.Required(CONF_INCIDENT_RADIUS, default=radius): vol.All(
                         vol.Coerce(int),
                         vol.Range(min=MIN_INCIDENT_RADIUS, max=MAX_INCIDENT_RADIUS),
                     ),
                 }
             ),
+            errors=errors,
         )

@@ -179,6 +179,7 @@ custom_components/emasesa/
 ├── sensor.py          # entidades sensor
 ├── manifest.json
 ├── redes.py           # red de SINAC según la ubicación (límites municipales del IGN)
+├── repairs.py         # aviso para marcar el suministro en el mapa en instalaciones previas
 ├── limites_municipales.json  # límites de los 12 municipios (IGN, CC BY 4.0)
 ├── services.yaml      # definición de los servicios del dominio
 ├── strings.json       # textos del config flow, opciones y nombres de entidad

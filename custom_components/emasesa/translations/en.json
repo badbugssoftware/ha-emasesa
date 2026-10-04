@@ -22,6 +22,13 @@
           "contrato_id": "Contract / supply point"
         }
       },
+      "ubicacion": {
+        "title": "Where is the supply?",
+        "description": "Mark on the map where this supply is. It is used to show your **tap water analysis** (chlorine, hardness, pH…), which is different in each municipality, and nearby network incidents. The point never leaves your Home Assistant.",
+        "data": {
+          "ubicacion": "Supply location"
+        }
+      },
       "reauth_confirm": {
         "title": "Re-authenticate",
         "description": "Your EMASESA session expired. Enter your password again.",
@@ -40,7 +47,8 @@
     "error": {
       "invalid_auth": "Invalid username or password.",
       "invalid_pin": "Invalid verification code.",
-      "cannot_connect": "Could not connect to EMASESA."
+      "cannot_connect": "Could not connect to EMASESA.",
+      "fuera_de_emasesa": "That point is not in any municipality served by EMASESA. Mark where the supply is on the map."
     },
     "abort": {
       "already_configured": "This contract is already configured.",
@@ -57,9 +65,12 @@
           "ubicacion": "Supply location"
         },
         "data_description": {
-          "ubicacion": "Where this supply is. Defaults to your Home Assistant location; change it if the contract is for another home or a business. It is used for nearby incidents and to pick the supply network (the municipality) whose water quality is shown."
+          "ubicacion": "Where this supply is. It decides the water analysis, which is the one for the municipality the point falls in, and nearby incidents. Change it if the contract is for another home or a business."
         }
       }
+    },
+    "error": {
+      "fuera_de_emasesa": "That point is not in any municipality served by EMASESA. Mark where the supply is on the map."
     }
   },
   "entity": {
@@ -141,9 +152,25 @@
     }
   },
   "issues": {
-    "ubicacion_sin_red": {
-      "title": "The location of {contrato} is not in an EMASESA municipality",
-      "description": "Water quality comes from the supply network of the municipality where the supply is, and the configured location is not in any municipality served by EMASESA. Most likely the location is wrong: fix it in **Settings → Devices & services → EMASESA → Configure**. Until then the water quality sensors are not shown; everything else keeps working."
+    "marcar_suministro": {
+      "title": "Mark where the supply for {contrato} is to see the water analysis",
+      "fix_flow": {
+        "step": {
+          "ubicacion": {
+            "title": "Water analysis for {contrato}",
+            "description": "The EMASESA integration can now show your **tap water analysis** (chlorine, hardness, pH, conductivity…) from the data EMASESA reports to the Spanish Ministry of Health.\n\nThe analysis is different in each municipality, so it needs to know **where this supply is**. Mark the point on the map: your Home Assistant location is preset, but move it if the contract is for another home. The point never leaves your Home Assistant.",
+            "data": {
+              "ubicacion": "Supply location"
+            }
+          }
+        },
+        "error": {
+          "fuera_de_emasesa": "That point is not in any municipality served by EMASESA. Mark where the supply is on the map."
+        },
+        "abort": {
+          "entry_not_found": "The contract no longer exists."
+        }
+      }
     }
   }
 }

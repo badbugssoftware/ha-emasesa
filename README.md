@@ -148,7 +148,7 @@ histórico.
 Salen de **SINAC**, el Sistema de Información Nacional de Aguas de Consumo del Ministerio
 de Sanidad, donde EMASESA está obligada a notificar los análisis de cada **red de
 abastecimiento** (una por municipio). Se consultan una vez **cada 24 horas**, para la red del
-municipio en el que está tu suministro (ver [Configuración](#configuración)).
+municipio en el que has marcado tu suministro (ver [Configuración](#configuración)).
 
 | Entidad | Parámetro SINAC | Unidad | `device_class` | Activado |
 | --- | --- | --- | --- | --- |
@@ -343,18 +343,22 @@ Todo se hace desde la interfaz; no hay nada que poner en `configuration.yaml`.
    quieres monitorizar; se muestran como `nº de contrato — dirección de suministro`.
    Si solo hay uno, este paso se salta.
 
-La **red de abastecimiento** de la que sale la [calidad del agua](#calidad-del-agua) no se
-pregunta: es la del **municipio en el que está el suministro**, según su ubicación (por
-defecto, la de Home Assistant).
+5. **Ubicación del suministro**: marca en el mapa dónde está. De ahí sale el análisis de
+   la [calidad del agua](#calidad-del-agua), que es distinto en cada municipio, y las
+   incidencias cercanas. Viene puesta la ubicación de Home Assistant; muévela si el
+   contrato es de otra vivienda o de un local.
 
-| Municipios con red de EMASESA en SINAC |
-| --- |
-| Alcalá de Guadaíra · Alcalá del Río · Camas · Coria del Río · Dos Hermanas · El Garrobo · El Ronquillo · La Puebla del Río · La Rinconada · Mairena del Alcor · San Juan de Aznalfarache · Sevilla |
+   | Municipios con red de EMASESA en SINAC |
+   | --- |
+   | Alcalá de Guadaíra · Alcalá del Río · Camas · Coria del Río · Dos Hermanas · El Garrobo · El Ronquillo · La Puebla del Río · La Rinconada · Mairena del Alcor · San Juan de Aznalfarache · Sevilla |
 
-> La ubicación **no sale de Home Assistant**: los límites municipales van dentro de la
-> integración. Si el contrato es de otra vivienda, corrige su ubicación en **Configurar**.
-> Y si la ubicación cae fuera de esos municipios, un aviso en **Ajustes → Sistema →
-> Reparaciones** te pide que la revises; mientras tanto, todo lo demás funciona igual.
+   El punto **no sale de Home Assistant**: los límites municipales van dentro de la
+   integración.
+
+> **¿Ya tenías la integración instalada?** Al actualizar, cada contrato aparece en
+> **Ajustes → Sistema → Reparaciones** con el aviso *Marca dónde está el suministro para
+> ver el análisis del agua*. Pulsa en él, marca el punto en el mapa y los sensores de
+> calidad aparecen solos. Mientras no lo marques, todo lo demás sigue funcionando igual.
 
 Puedes **repetir el proceso** para añadir más contratos: cada uno se crea como una entrada
 independiente, con su propio dispositivo y sus propias estadísticas.
