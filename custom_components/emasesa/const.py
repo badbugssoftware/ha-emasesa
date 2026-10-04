@@ -40,7 +40,7 @@ CONF_SUPPLY_ADDRESS = "direccion_suministro"
 # mejor de lo que puede saberlo quien la instala. Se listan para poder
 # limpiarlas de las entradas existentes y no dejar ajustes que ya no hacen
 # nada pero parecen hacerlo.
-OPCIONES_OBSOLETAS = ("scan_minutes", "scan_hours")
+OPCIONES_OBSOLETAS = ("scan_minutes", "scan_hours", "red_sinac")
 
 # --- Ritmo de sondeo -------------------------------------------------------
 # La telelectura NB-IoT publica UNA VEZ AL DÍA y a una hora que varía: medido
@@ -125,10 +125,10 @@ CALIDAD_INTERVAL_REINTENTO = timedelta(hours=2)
 # (nombre, id de la red). Son identificadores del propio SINAC y no cambian;
 # sacados recorriendo todos los municipios de la provincia de Sevilla y
 # quedándose con las redes cuyo gestor es EMASESA.
-# La elige quien instala: no se deduce de nada. Hasta que no hay una elegida
-# no se consulta SINAC ni se crean las entidades de calidad.
-CONF_RED_SINAC = "red_sinac"
-ISSUE_ELEGIR_RED = "elegir_red_sinac"
+# La red de un suministro es la del municipio en el que está (ver redes.py).
+# Si su ubicación cae fuera de todos, no se consulta SINAC ni se crean las
+# entidades de calidad, y se avisa para que se revise la ubicación.
+ISSUE_UBICACION_SIN_RED = "ubicacion_sin_red"
 REDES_SINAC: dict[str, tuple[str, str]] = {
     "41004": ("Alcalá de Guadaíra", "1376"),
     "41005": ("Alcalá del Río", "1366"),

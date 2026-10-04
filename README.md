@@ -147,8 +147,8 @@ histórico.
 
 Salen de **SINAC**, el Sistema de Información Nacional de Aguas de Consumo del Ministerio
 de Sanidad, donde EMASESA está obligada a notificar los análisis de cada **red de
-abastecimiento** (una por municipio). Se consultan una vez **cada 24 horas** y solo si has elegido
-la red de tu suministro (ver [Configuración](#configuración)).
+abastecimiento** (una por municipio). Se consultan una vez **cada 24 horas**, para la red del
+municipio en el que está tu suministro (ver [Configuración](#configuración)).
 
 | Entidad | Parámetro SINAC | Unidad | `device_class` | Activado |
 | --- | --- | --- | --- | --- |
@@ -343,18 +343,18 @@ Todo se hace desde la interfaz; no hay nada que poner en `configuration.yaml`.
    quieres monitorizar; se muestran como `nº de contrato — dirección de suministro`.
    Si solo hay uno, este paso se salta.
 
-5. **Red de abastecimiento**: elige el municipio cuya red abastece al suministro. De ella
-   salen los datos de [calidad del agua](#calidad-del-agua). No se deduce de la dirección:
-   la eliges tú.
+La **red de abastecimiento** de la que sale la [calidad del agua](#calidad-del-agua) no se
+pregunta: es la del **municipio en el que está el suministro**, según su ubicación (por
+defecto, la de Home Assistant).
 
-   | Redes de EMASESA en SINAC |
-   | --- |
-   | Alcalá de Guadaíra · Alcalá del Río · Camas · Coria del Río · Dos Hermanas · El Garrobo · El Ronquillo · La Puebla del Río · La Rinconada · Mairena del Alcor · San Juan de Aznalfarache · Sevilla |
+| Municipios con red de EMASESA en SINAC |
+| --- |
+| Alcalá de Guadaíra · Alcalá del Río · Camas · Coria del Río · Dos Hermanas · El Garrobo · El Ronquillo · La Puebla del Río · La Rinconada · Mairena del Alcor · San Juan de Aznalfarache · Sevilla |
 
-> **¿Ya tenías la integración instalada?** Al actualizar, cada contrato aparece en
-> **Ajustes → Sistema → Reparaciones** con el aviso *Elige la red de abastecimiento*.
-> Pulsa en él, elige tu municipio y los sensores de calidad aparecen solos. Mientras no la
-> elijas, todo lo demás sigue funcionando igual.
+> La ubicación **no sale de Home Assistant**: los límites municipales van dentro de la
+> integración. Si el contrato es de otra vivienda, corrige su ubicación en **Configurar**.
+> Y si la ubicación cae fuera de esos municipios, un aviso en **Ajustes → Sistema →
+> Reparaciones** te pide que la revises; mientras tanto, todo lo demás funciona igual.
 
 Puedes **repetir el proceso** para añadir más contratos: cada uno se crea como una entrada
 independiente, con su propio dispositivo y sus propias estadísticas.
@@ -372,9 +372,8 @@ En la tarjeta de la integración, **Configurar**:
 
 | Opción | Clave | Por defecto | Rango |
 | --- | --- | --- | --- |
-| Ubicación del suministro | `latitude` / `longitude` | La de Home Assistant | – |
+| Ubicación del suministro (incidencias cercanas y red de la calidad del agua) | `latitude` / `longitude` | La de Home Assistant | – |
 | Radio de incidencias cercanas (metros) | `incident_radius_m` | `1000` | `100` – `20000` |
-| Red de abastecimiento (calidad del agua) | `red_sinac` | La elegida en el alta | Las 12 redes de EMASESA |
 
 ### El intervalo de sondeo no se configura
 
@@ -847,6 +846,10 @@ que sirvieron de referencia e inspiración:
   de [@duhow](https://github.com/duhow) — consumo de agua de Barcelona.
 
 Y, cómo no, de la comunidad de Home Assistant y de HACS.
+
+Los **límites municipales** con los que se decide la red de abastecimiento son del
+[Instituto Geográfico Nacional](https://www.ign.es) (servicio INSPIRE de unidades
+administrativas), con licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.es).
 
 ## Licencia
 

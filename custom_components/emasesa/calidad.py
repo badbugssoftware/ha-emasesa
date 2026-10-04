@@ -13,8 +13,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -23,26 +21,11 @@ from .api import EmasesaError, get_sinac_detail, parse_sinac_detail
 from .const import (
     CALIDAD_INTERVAL,
     CALIDAD_INTERVAL_REINTENTO,
-    CONF_RED_SINAC,
     DOMAIN,
     REDES_SINAC,
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def esquema_red(por_defecto: str | None = None) -> vol.Schema:
-    """Selector de red, común al alta, las opciones y la reparación."""
-    redes = {
-        codigo: nombre
-        for codigo, (nombre, _) in sorted(REDES_SINAC.items(), key=lambda r: r[1][0])
-    }
-    clave = (
-        vol.Required(CONF_RED_SINAC, default=por_defecto)
-        if por_defecto in REDES_SINAC
-        else vol.Required(CONF_RED_SINAC)
-    )
-    return vol.Schema({clave: vol.In(redes)})
 
 
 class EmasesaCalidadCoordinator(DataUpdateCoordinator[dict[str, Any]]):

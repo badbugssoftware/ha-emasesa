@@ -25,7 +25,6 @@ from .api import (
     EmasesaError,
     EmasesaTwoFactorRequired,
 )
-from .calidad import esquema_red
 from .const import (
     CONF_CONTRACT_ID,
     CONF_CONTRACT_NUMBER,
@@ -34,7 +33,6 @@ from .const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_PASSWORD,
-    CONF_RED_SINAC,
     CONF_SUPPLY_ADDRESS,
     CONF_USERNAME,
     DEFAULT_INCIDENT_RADIUS,
@@ -70,7 +68,6 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
         self._client: EmasesaClient | None = None
         self._data: dict[str, Any] = {}
         self._contracts: list[dict[str, Any]] = []
-        self._contract: dict[str, Any] = {}
         self._reauth_password: str | None = None
         self._reauth_device_id: str | None = None
 
@@ -214,22 +211,6 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
         contract_id = str(contract.get("contratos_id"))
         await self.async_set_unique_id(contract_id)
         self._abort_if_unique_id_configured()
-        self._contract = contract
-        return await self.async_step_red()
-
-    async def async_step_red(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Red de abastecimiento de la que sacar la calidad del agua (SINAC).
-
-        La elige quien instala: no se deduce de la dirección, que no siempre
-        trae el municipio y a veces lo trae de forma ambigua.
-        """
-        if user_input is None:
-            return self.async_show_form(step_id="red", data_schema=esquema_red())
-
-        contract = self._contract
-        contract_id = str(contract.get("contratos_id"))
         address = contract.get("direccion_suministro", "")
         number = contract.get("numero_contrato") or contract_id
         return self.async_create_entry(
@@ -240,7 +221,6 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_CONTRACT_NUMBER: number,
                 CONF_SUPPLY_ADDRESS: address,
             },
-            options={CONF_RED_SINAC: user_input[CONF_RED_SINAC]},
         )
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
@@ -342,7 +322,7 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class EmasesaOptionsFlow(OptionsFlow):
-    """Ubicación del suministro, radio de incidencias y red de abastecimiento.
+    """Ubicación del suministro y radio de incidencias.
 
     El intervalo de sondeo NO se ofrece a propósito: lo decide la integración,
     que se espacia cuando ya tiene el dato del día y se acelera mientras lo
@@ -375,9 +355,6 @@ class EmasesaOptionsFlow(OptionsFlow):
                 CONF_LONGITUDE, self.hass.config.longitude
             ),
         }
-        # La red de SINAC de la que salen los datos de calidad del agua: la
-        # elegida, o ninguna marcada si todavía no se ha elegido.
-        red = esquema_red(self.config_entry.options.get(CONF_RED_SINAC))
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -387,7 +364,6 @@ class EmasesaOptionsFlow(OptionsFlow):
                         vol.Coerce(int),
                         vol.Range(min=MIN_INCIDENT_RADIUS, max=MAX_INCIDENT_RADIUS),
                     ),
-                    **red.schema,
                 }
             ),
         )

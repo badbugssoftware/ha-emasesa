@@ -35,18 +35,18 @@ from .const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_PASSWORD,
-    CONF_RED_SINAC,
     CONF_USERNAME,
     DEFAULT_INCIDENT_RADIUS,
     DOMAIN,
     INITIAL_BACKFILL_DAYS,
-    ISSUE_ELEGIR_RED,
+    ISSUE_UBICACION_SIN_RED,
     OPCIONES_OBSOLETAS,
     PLATFORMS,
     REDES_SINAC,
 )
 from .coordinator import EmasesaCoordinator
 from .entity import LEGACY_RESERVOIR_DEVICE
+from .redes import cargar_limites, red_de
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.options.get(CONF_LONGITUDE),
     )
     await coordinator.async_config_entry_first_refresh()
-    coordinator.calidad = _preparar_calidad(hass, entry)
+    coordinator.calidad = await _preparar_calidad(hass, entry)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -107,19 +107,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-@callback
-def _preparar_calidad(
+async def _preparar_calidad(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> EmasesaCalidadCoordinator | None:
-    """Coordinator de SINAC para la red elegida, o un aviso para elegirla.
+    """Coordinator de SINAC para la red que abastece al suministro.
 
-    La red la elige quien instala; no se deduce de la dirección. Las entradas
-    creadas antes de que existiera la calidad del agua no tienen ninguna, así
-    que se les pide desde Reparaciones en vez de suponer una. Hasta entonces no
-    se consulta SINAC ni se crean las entidades de calidad.
+    La red es la del municipio en el que está el suministro: su ubicación en
+    las opciones o, si no se ha tocado, la de Home Assistant. Si cae fuera de
+    los municipios de EMASESA no hay calidad del agua y se avisa en
+    Reparaciones, porque lo normal es que la ubicación esté mal puesta.
     """
-    issue_id = f"{ISSUE_ELEGIR_RED}_{entry.entry_id}"
-    red = entry.options.get(CONF_RED_SINAC)
+    limites = await hass.async_add_executor_job(cargar_limites)
+    red = red_de(
+        entry.options.get(CONF_LATITUDE, hass.config.latitude),
+        entry.options.get(CONF_LONGITUDE, hass.config.longitude),
+        limites,
+    )
+    issue_id = f"{ISSUE_UBICACION_SIN_RED}_{entry.entry_id}"
     if red in REDES_SINAC:
         ir.async_delete_issue(hass, DOMAIN, issue_id)
         return EmasesaCalidadCoordinator(hass, red)
@@ -127,12 +131,11 @@ def _preparar_calidad(
         hass,
         DOMAIN,
         issue_id,
-        is_fixable=True,
+        is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.WARNING,
-        translation_key=ISSUE_ELEGIR_RED,
+        translation_key=ISSUE_UBICACION_SIN_RED,
         translation_placeholders={"contrato": entry.title},
-        data={"entry_id": entry.entry_id},
     )
     return None
 
@@ -265,10 +268,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Al borrar el contrato, su aviso de elegir red ya no tiene sentido."""
-    ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_ELEGIR_RED}_{entry.entry_id}")
+    """Al borrar el contrato, su aviso de ubicación ya no tiene sentido."""
+    ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_UBICACION_SIN_RED}_{entry.entry_id}")
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Recarga cuando cambian las opciones (ubicación, radio o red de SINAC)."""
+    """Recarga cuando cambian las opciones (ubicación o radio)."""
     await hass.config_entries.async_reload(entry.entry_id)

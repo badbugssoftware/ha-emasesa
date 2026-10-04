@@ -33,11 +33,9 @@ from custom_components.emasesa.const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_PASSWORD,
-    CONF_RED_SINAC,
     CONF_SUPPLY_ADDRESS,
     CONF_USERNAME,
     DOMAIN,
-    REDES_SINAC,
 )
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
@@ -152,22 +150,6 @@ async def start_user_flow(hass: HomeAssistant) -> dict[str, Any]:
 CREDENCIALES = {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD}
 
 
-async def elegir_red(
-    hass: HomeAssistant, result: dict[str, Any], red: str = "41091"
-) -> dict[str, Any]:
-    """Completa el paso de la red de SINAC si el flujo ha llegado a él.
-
-    Es el último paso del alta, así que casi todos los tests pasan por aquí;
-    si el flujo ha acabado de otra forma (error, aborto), no toca nada.
-    """
-    if result["type"] is FlowResultType.FORM and result["step_id"] == "red":
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_RED_SINAC: red}
-        )
-        await hass.async_block_till_done()
-    return result
-
-
 # --------------------------------------------------------------------------- #
 # normalize_username
 # --------------------------------------------------------------------------- #
@@ -201,7 +183,6 @@ async def test_alta_con_un_solo_contrato(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "EMASESA 0012345678"
     assert result["data"][CONF_USERNAME] == USERNAME
@@ -228,7 +209,6 @@ async def test_alta_normaliza_el_documento(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["data"][CONF_USERNAME] == "12345678Z"
     # Y al cliente se le pasa ya normalizado, no lo que tecleó el usuario.
     assert ctor.call_args.args[1] == "12345678Z"
@@ -259,7 +239,6 @@ async def test_alta_sigue_aunque_falle_el_registro_de_confianza(
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -285,7 +264,6 @@ async def test_alta_credenciales_invalidas_y_reintento(hass: HomeAssistant) -> N
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -364,7 +342,6 @@ async def test_2fa_camino_completo(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     # El PIN se manda sin espacios: copiar/pegar del SMS los arrastra.
     assert client.login.await_args.kwargs["pin"] == "123456"
@@ -399,7 +376,6 @@ async def test_2fa_pin_incorrecto_y_reintento(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -424,7 +400,6 @@ async def test_2fa_al_pedir_los_contratos(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
@@ -466,7 +441,6 @@ async def test_seleccion_de_contrato(hass: HomeAssistant) -> None:
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_CONTRACT_ID] == "9988776"
     assert result["title"] == "EMASESA 0087654321"
@@ -531,7 +505,6 @@ async def test_reutiliza_el_dispositivo_del_mismo_usuario(
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["data"][CONF_DEVICE_ID] == "dispositivo-de-confianza"
     assert ctor.call_args.args[3] == "dispositivo-de-confianza"
 
@@ -553,7 +526,6 @@ async def test_no_reutiliza_el_dispositivo_de_otro_usuario(
         )
         await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["data"][CONF_DEVICE_ID] != "de-otro"
 
 
@@ -728,14 +700,11 @@ async def test_opciones_guardan_la_ubicacion_plana(hass: HomeAssistant) -> None:
         {
             "ubicacion": {"latitude": 37.3891, "longitude": -5.9845},
             CONF_INCIDENT_RADIUS: 2500,
-            CONF_RED_SINAC: "41038",
         },
     )
     await hass.async_block_till_done()
 
-    result = await elegir_red(hass, result)
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options[CONF_RED_SINAC] == "41038"
     assert entry.options[CONF_INCIDENT_RADIUS] == 2500
     assert entry.options[CONF_LATITUDE] == 37.3891
     assert entry.options[CONF_LONGITUDE] == -5.9845
@@ -771,7 +740,7 @@ async def test_el_intervalo_de_sondeo_no_se_ofrece(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
     campos = {str(k) for k in result["data_schema"].schema}
-    assert campos == {"ubicacion", CONF_INCIDENT_RADIUS, CONF_RED_SINAC}
+    assert campos == {"ubicacion", CONF_INCIDENT_RADIUS}
 
 
 async def test_se_retiran_las_opciones_de_intervalo_antiguas(
@@ -783,7 +752,13 @@ async def test_se_retiran_las_opciones_de_intervalo_antiguas(
     entry = _entrada_existente(hass)
     hass.config_entries.async_update_entry(
         entry,
-        options={"scan_minutes": 45, "scan_hours": 3, CONF_INCIDENT_RADIUS: 2500},
+        options={
+            "scan_minutes": 45,
+            "scan_hours": 3,
+            # La red ya no se elige: sale de la ubicación (0.8.3).
+            "red_sinac": "41004",
+            CONF_INCIDENT_RADIUS: 2500,
+        },
     )
 
     _limpiar_opciones_obsoletas(hass, entry)
@@ -794,29 +769,12 @@ async def test_se_retiran_las_opciones_de_intervalo_antiguas(
 # --------------------------------------------------------------------------- #
 # Red de abastecimiento (calidad del agua)
 # --------------------------------------------------------------------------- #
-async def test_opciones_ofrecen_las_redes_de_emasesa(hass: HomeAssistant) -> None:
-    entry = _entrada_existente(hass)
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+async def test_alta_no_pregunta_la_red(hass: HomeAssistant) -> None:
+    """La red sale de la ubicación del suministro: en el alta no se elige nada.
 
-    campo = next(k for k in result["data_schema"].schema if str(k) == CONF_RED_SINAC)
-    redes = result["data_schema"].schema[campo].container
-    assert set(redes) == set(REDES_SINAC)
-    assert redes["41091"] == "Sevilla"
-    # Sin red elegida no se propone ninguna: no se supone nada.
-    assert campo.default is vol.UNDEFINED
-
-
-async def test_opciones_conservan_la_red_elegida(hass: HomeAssistant) -> None:
-    entry = _entrada_existente(hass)
-    hass.config_entries.async_update_entry(entry, options={CONF_RED_SINAC: "41021"})
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-
-    campo = next(k for k in result["data_schema"].schema if str(k) == CONF_RED_SINAC)
-    assert campo.default() == "41021"
-
-
-async def test_alta_pide_la_red_y_la_guarda_en_opciones(hass: HomeAssistant) -> None:
-    """La red la elige quien instala, sin deducirla de la dirección."""
+    Una lista obligatoria llega con la primera opción marcada, y era fácil
+    quedarse con «Alcalá de Guadaíra» sin darse cuenta.
+    """
     client = make_client()
     result = await start_user_flow(hass)
 
@@ -824,12 +782,7 @@ async def test_alta_pide_la_red_y_la_guarda_en_opciones(hass: HomeAssistant) -> 
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], CREDENCIALES
         )
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "red"
-    campo = next(k for k in result["data_schema"].schema if str(k) == CONF_RED_SINAC)
-    assert campo.default is vol.UNDEFINED
-
-    result = await elegir_red(hass, result, "41038")
+        await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["options"] == {CONF_RED_SINAC: "41038"}
+    assert result["options"] == {}
