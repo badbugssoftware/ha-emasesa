@@ -55,6 +55,9 @@
       "no_contracts": "No contracts found for this account.",
       "cannot_connect": "Could not connect to EMASESA.",
       "reauth_successful": "Session renewed successfully."
+    },
+    "create_entry": {
+      "default": "The supply is in **{municipio}**: the water analysis for the {municipio} network will be shown."
     }
   },
   "options": {
@@ -169,6 +172,9 @@
         },
         "abort": {
           "entry_not_found": "The contract no longer exists."
+        },
+        "create_entry": {
+          "default": "Done. The supply is in **{municipio}**: the water analysis for the {municipio} network will be shown. The quality sensors appear in a few minutes."
         }
       }
     }

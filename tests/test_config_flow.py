@@ -822,6 +822,8 @@ async def test_alta_pide_marcar_el_suministro_en_el_mapa(hass: HomeAssistant) ->
         result = await marcar_ubicacion(hass, result, DOS_HERMANAS)
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
+    # Al terminar se dice a qué municipio se ha asignado el suministro.
+    assert result["description_placeholders"] == {"municipio": "Dos Hermanas"}
     assert result["options"] == {
         CONF_LATITUDE: DOS_HERMANAS["latitude"],
         CONF_LONGITUDE: DOS_HERMANAS["longitude"],

@@ -41,6 +41,7 @@ from .const import (
     DOMAIN,
     MAX_INCIDENT_RADIUS,
     MIN_INCIDENT_RADIUS,
+    REDES_SINAC,
 )
 from .redes import cargar_limites, red_de
 
@@ -80,23 +81,26 @@ def esquema_ubicacion(
 
 async def ubicacion_marcada(
     hass: HomeAssistant, ubicacion: Any
-) -> dict[str, Any] | None:
-    """Opciones que guardan el punto marcado, o None si no es de EMASESA.
+) -> tuple[dict[str, Any], str] | None:
+    """Opciones que guardan el punto marcado y el municipio en el que cae.
 
-    EMASESA sólo abastece a doce municipios: un punto fuera de ellos es un
-    mapa mal marcado, y sin municipio no hay red de la que sacar el análisis.
+    None si el punto no es de EMASESA: sólo abastece a doce municipios, así
+    que fuera de ellos el mapa está mal marcado, y sin municipio no hay red
+    de la que sacar el análisis. El municipio se devuelve para decírselo a
+    quien marca el punto, que no siempre sabe de cuál es su red.
     """
     if not isinstance(ubicacion, dict):
         return None
     latitud, longitud = ubicacion.get("latitude"), ubicacion.get("longitude")
     limites = await hass.async_add_executor_job(cargar_limites)
-    if red_de(latitud, longitud, limites) is None:
+    if (red := red_de(latitud, longitud, limites)) not in REDES_SINAC:
         return None
-    return {
+    opciones = {
         CONF_LATITUDE: latitud,
         CONF_LONGITUDE: longitud,
         CONF_UBICACION_CONFIRMADA: True,
     }
+    return opciones, REDES_SINAC[red][0]
 
 
 class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -260,12 +264,12 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Dónde está el suministro: de ahí sale la red del análisis del agua."""
         errors: dict[str, str] = {}
-        opciones = None
+        marcada = None
         if user_input is not None:
-            opciones = await ubicacion_marcada(self.hass, user_input.get("ubicacion"))
-            if opciones is None:
+            marcada = await ubicacion_marcada(self.hass, user_input.get("ubicacion"))
+            if marcada is None:
                 errors["base"] = "fuera_de_emasesa"
-        if opciones is None:
+        if marcada is None:
             return self.async_show_form(
                 step_id="ubicacion",
                 data_schema=vol.Schema(esquema_ubicacion(self.hass)),
@@ -284,7 +288,8 @@ class EmasesaConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_CONTRACT_NUMBER: number,
                 CONF_SUPPLY_ADDRESS: address,
             },
-            options=opciones,
+            options=marcada[0],
+            description_placeholders={"municipio": marcada[1]},
         )
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
@@ -404,7 +409,7 @@ class EmasesaOptionsFlow(OptionsFlow):
             datos = dict(user_input)
             marcada = await ubicacion_marcada(self.hass, datos.pop("ubicacion", None))
             if marcada is not None:
-                return self.async_create_entry(title="", data={**datos, **marcada})
+                return self.async_create_entry(title="", data={**datos, **marcada[0]})
             errors["base"] = "fuera_de_emasesa"
 
         radius = self.config_entry.options.get(

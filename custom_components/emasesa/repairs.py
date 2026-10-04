@@ -47,9 +47,11 @@ class MarcarSuministroFlow(RepairsFlow):
             marcada = await ubicacion_marcada(self.hass, user_input.get("ubicacion"))
             if marcada is not None:
                 self.hass.config_entries.async_update_entry(
-                    entry, options={**entry.options, **marcada}
+                    entry, options={**entry.options, **marcada[0]}
                 )
-                return self.async_create_entry(data={})
+                return self.async_create_entry(
+                    data={}, description_placeholders={"municipio": marcada[1]}
+                )
             errors["base"] = "fuera_de_emasesa"
         return self.async_show_form(
             step_id="ubicacion",

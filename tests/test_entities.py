@@ -953,6 +953,8 @@ async def test_la_reparacion_marca_el_suministro_y_activa_la_calidad(
         await hass.async_block_till_done()
 
     assert result["type"] == "create_entry"
+    # El «problema arreglado» dice a qué municipio se ha asignado.
+    assert result["description_placeholders"] == {"municipio": "Camas"}
     # Se añade a las opciones que hubiera, sin pisarlas.
     assert entry.options == {CONF_INCIDENT_RADIUS: 1500, **marcado(CAMAS)}
     # La recarga (listener de opciones) crea ya las entidades de calidad.
