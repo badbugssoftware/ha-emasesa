@@ -40,8 +40,3 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
-          # Mientras el logo/icono de "emasesa" no esté aceptado en
-          # https://github.com/home-assistant/brands, la comprobación "brands"
-          # fallará. Descomenta la línea siguiente para ignorarla hasta que el
-          # PR de brands esté mergeado.
-          # ignore: brands

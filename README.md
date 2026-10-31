@@ -4,7 +4,7 @@
 
 <h1 align="center">EMASESA (Aguas de Sevilla) para Home Assistant</h1>
 
-[![HACS: repositorio personalizado](https://img.shields.io/badge/HACS-repositorio%20personalizado-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://hacs.xyz/docs/faq/custom_repositories/)
+[![Marketplace y HACS: añadir por enlace](https://img.shields.io/badge/Marketplace%20%2F%20HACS-a%C3%B1adir%20por%20enlace-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://hacs.xyz/docs/faq/custom_repositories/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%E2%89%A5%202024.12-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-3DA639?style=for-the-badge)](LICENSE)
 
@@ -300,10 +300,21 @@ dentro del ciclo.
 
 ## Instalación
 
-### Opción A — HACS (recomendada)
+### Opción A — Marketplace o HACS (recomendada)
 
-Este repositorio todavía no está en el índice por defecto de HACS, así que se añade como
-**repositorio personalizado**:
+Desde Home Assistant 2026.11, HACS viene de serie como **Marketplace**. Este repositorio
+todavía no está en su catálogo, así que se añade por enlace.
+
+**Con Home Assistant 2026.11 o posterior (Marketplace):**
+
+1. Ve a **Ajustes → Marketplace**. La primera vez tendrás que aceptar un aviso.
+2. Pulsa **Añadir desde enlace** (arriba a la derecha) y escribe
+   `badbugssoftware/ha-emasesa`. Añadir por enlace exige
+   [conectar una cuenta de GitHub](https://www.home-assistant.io/integrations/marketplace/);
+   solo pide acceso de lectura a lo público.
+3. Busca **EMASESA (Aguas de Sevilla)** y pulsa **Instalar**.
+
+**Con versiones anteriores (HACS):**
 
 1. Abre **HACS** en Home Assistant.
 2. Menú **⋮** (arriba a la derecha) → **Repositorios personalizados**.
@@ -312,7 +323,12 @@ Este repositorio todavía no está en el índice por defecto de HACS, así que s
 4. Busca **EMASESA (Aguas de Sevilla)** en HACS y pulsa **Descargar**.
 5. **Reinicia** Home Assistant.
 
-[![Añadir repositorio a HACS](https://img.shields.io/badge/HACS-a%C3%B1adir%20repositorio-41BDF5?style=flat-square&logo=home-assistant&logoColor=white)](https://my.home-assistant.io/redirect/hacs_repository/?owner=badbugssoftware&repository=ha-emasesa&category=integration)
+Este botón abre el repositorio directamente, tanto en el Marketplace como en HACS:
+
+[![Abrir el repositorio](https://img.shields.io/badge/Home%20Assistant-abrir%20repositorio-41BDF5?style=flat-square&logo=home-assistant&logoColor=white)](https://my.home-assistant.io/redirect/hacs_repository/?owner=badbugssoftware&repository=ha-emasesa&category=integration)
+
+> **¿Ya la tenías instalada por HACS?** Al subir a Home Assistant 2026.11 pasa sola al
+> Marketplace y sigue recibiendo actualizaciones; no tienes que hacer nada.
 
 ### Opción B — Instalación manual
 

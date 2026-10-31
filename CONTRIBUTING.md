@@ -46,7 +46,7 @@ Abre una incidencia en
 [GitHub Issues](https://github.com/badbugssoftware/ha-emasesa/issues) e incluye:
 
 1. **Versión de Home Assistant** y **versión de la integración** (la de `manifest.json`).
-2. **Cómo lo has instalado**: HACS o manual.
+2. **Cómo lo has instalado**: Marketplace, HACS o manual.
 3. **Qué esperabas** y **qué ha pasado**.
 4. **Pasos para reproducirlo**.
 5. **Log relevante, anonimizado**. Actívalo así y reinicia:
@@ -272,8 +272,8 @@ Reservado al mantenedor:
 1. Sube el campo `version` en `custom_components/emasesa/manifest.json`
    (versionado semántico).
 2. Commit `chore: release vX.Y.Z` y etiqueta `vX.Y.Z`.
-3. Crea la release en GitHub con las notas de los cambios. HACS toma las actualizaciones
-   de las releases etiquetadas.
+3. Crea la release en GitHub con las notas de los cambios. El Marketplace y HACS toman
+   las actualizaciones de las releases, no de las etiquetas sueltas.
 
 ## Código de conducta
 
