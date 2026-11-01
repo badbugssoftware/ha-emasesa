@@ -7,6 +7,7 @@
 [![Marketplace y HACS: añadir por enlace](https://img.shields.io/badge/Marketplace%20%2F%20HACS-a%C3%B1adir%20por%20enlace-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://hacs.xyz/docs/faq/custom_repositories/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%E2%89%A5%202024.12-41BDF5?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-3DA639?style=for-the-badge)](LICENSE)
+[![Invítanos a un café](https://img.shields.io/badge/inv%C3%ADtanos%20a%20un%20caf%C3%A9-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/badbugssofh)
 
 [![Validate](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/validate.yml/badge.svg)](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/validate.yml)
 [![Lint](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/lint.yml/badge.svg)](https://github.com/badbugssoftware/ha-emasesa/actions/workflows/lint.yml)
@@ -870,6 +871,11 @@ Y, cómo no, de la comunidad de Home Assistant y de HACS.
 Los **límites municipales** con los que se decide la red de abastecimiento son del
 [Instituto Geográfico Nacional](https://www.ign.es) (servicio INSPIRE de unidades
 administrativas), con licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.es).
+
+## Apoyar el proyecto
+
+La integración es gratuita y lo seguirá siendo. Si te resulta útil y quieres apoyarla,
+puedes [invitarnos a un café](https://buymeacoffee.com/badbugssofh).
 
 ## Licencia
 
